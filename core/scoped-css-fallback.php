@@ -18,6 +18,17 @@ class Design_Core_Elementor_Scoped_CSS_Fallback {
         }
         if ( $safe ) {
             $settings['custom_css'] = $this->append_css( $settings['custom_css'] ?? '', "selector {\n  " . implode( "\n  ", $safe ) . "\n}" );
+            // A theme/Elementor rule targeting the heading title element itself
+            // always beats inheritance from the widget wrapper. Mirror text
+            // declarations onto the title so fluid type actually renders.
+            if ( 'widget' === $element_type && 'heading' === $widget_type ) {
+                $text = array();
+                foreach ( $safe as $line ) {
+                    $prop = strtolower( trim( (string) strtok( $line, ':' ) ) );
+                    if ( in_array( $prop, array( 'font-size', 'line-height', 'letter-spacing', 'font-family', 'font-weight', 'font-style', 'color' ), true ) ) { $text[] = $line; }
+                }
+                if ( $text ) { $settings['custom_css'] = $this->append_css( $settings['custom_css'], "selector .elementor-heading-title {\n  " . implode( "\n  ", $text ) . "\n}" ); }
+            }
         }
         return array( 'settings' => $settings, 'custom_css' => $safe, 'custom_css_properties' => $safe_properties, 'unsupported' => $unsupported );
     }

@@ -79,6 +79,20 @@ class Design_Core_Elementor_Elementor_Setting_Governor {
                 $settings[$gap_control]=$encoder->encode($gap,'gaps');$applied[]=$gap_control;
             }
         }
+        // Elementor wraps boxed container children in .e-con-inner, leaving a
+        // grid container with a single grid item and collapsing auto-fit tracks.
+        // A grid container carrying its own track template must therefore be
+        // full-width, with the IR max-width re-expressed as centering CSS.
+        $has_template = isset( $settings['custom_css'] ) && false !== strpos( (string) $settings['custom_css'], 'grid-template' );
+        if ( $has_template ) {
+            $width_control = $this->registry->first_supported( 'container', '', array( 'content_width' ) );
+            if ( $width_control ) { $settings[ $width_control ] = 'full'; $applied[] = $width_control; }
+            $max = $node['layout']['max_width'] ?? null;
+            if ( is_array( $max ) && isset( $max['value'] ) && is_numeric( $max['value'] ) ) {
+                $unit = in_array( $max['unit'] ?? '', array( 'px', '%', 'em', 'rem', 'vw' ), true ) ? (string) $max['unit'] : 'px';
+                $settings['custom_css'] = trim( (string) ( $settings['custom_css'] ?? '' ) ) . "\nselector{max-width:" . $max['value'] . $unit . ";margin-left:auto;margin-right:auto;}";
+            } else { $warnings[] = 'Grid container uses full width but IR max-width is unavailable; centering CSS was not applied.'; }
+        }
         return array('settings'=>$settings,'warnings'=>$warnings,'applied'=>$applied);
     }
 

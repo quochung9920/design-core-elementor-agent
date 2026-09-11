@@ -143,6 +143,17 @@ abstract class Design_Core_Elementor_Abstract_Control_Adapter implements Design_
     }
 
     abstract protected function semantic_map();
+
+    /**
+     * layout.align records flex/grid align-items, never text alignment. Leaf
+     * widgets must not inherit it as a text-align control: only style.align
+     * (from text-align) may feed text alignment. Containers keep layout.align
+     * for flex_align_items -- this helper is for text-content widgets only.
+     */
+    protected function without_flex_align( array $node ) {
+        if ( ! isset( $node['style']['align'] ) ) { unset( $node['layout']['align'] ); }
+        return $node;
+    }
 }
 
 class Design_Core_Elementor_Container_Control_Adapter extends Design_Core_Elementor_Abstract_Control_Adapter {
@@ -264,6 +275,20 @@ class Design_Core_Elementor_Text_Control_Adapter extends Design_Core_Elementor_A
 
 class Design_Core_Elementor_Button_Control_Adapter extends Design_Core_Elementor_Abstract_Control_Adapter {
     protected $element_type = 'widget'; protected $widget_type = 'button';
+    public function map( $node ) {
+        $result = parent::map( $node );
+        // The button widget schema exposes no min-height control. Express the
+        // authored minimum height on the rendered button itself: min-height on
+        // the widget wrapper would not size the inner .elementor-button.
+        $min = $node['layout']['min_height'] ?? null;
+        if ( is_array( $min ) && isset( $min['value'] ) && is_numeric( $min['value'] ) ) {
+            $unit = in_array( $min['unit'] ?? '', array( 'px', '%', 'em', 'rem', 'vh' ), true ) ? (string) $min['unit'] : 'px';
+            $css = trim( (string) ( $result['settings']['custom_css'] ?? '' ) );
+            if ( '' !== $css ) { $css .= "\n"; }
+            $result['settings']['custom_css'] = $css . 'selector .elementor-button{min-height:' . $min['value'] . $unit . ';}';
+        }
+        return $result;
+    }
     protected function semantic_map() { return array(
         'color' => array( array( 'button_text_color', 'text_color' ), 'raw', 'color' ),
         'background' => array( array( 'background_color' ), 'raw', 'color' ),
