@@ -76,7 +76,7 @@ if find . -name '*.php' -not -path './vendor/*' -not -path './node_modules/*' -p
 # ---- Core contracts ------------------------------------------------------------
 say ""
 say "Contracts"
-CONTRACTS="architecture registry native-fidelity strict-native responsive-compiler design-intelligence design-brain rc19-intelligence rc20-fidelity reference-integration fixed-width-governance figma-fidelity pawcare-benchmark"
+CONTRACTS="architecture registry native-fidelity strict-native responsive-compiler design-intelligence design-brain rc19-intelligence rc20-fidelity reference-integration fixed-width-governance figma-fidelity pawcare-benchmark design-memory"
 for T in $CONTRACTS; do
   stage "$T"
   if [[ "$T" == "figma-fidelity" ]]; then
