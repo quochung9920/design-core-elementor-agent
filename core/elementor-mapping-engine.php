@@ -97,7 +97,15 @@ class Design_Core_Elementor_Mapping_Engine {
             if ( isset( $nodes[ $child_id ] ) ) { $child = $this->map_ir_node( $nodes[ $child_id ], $nodes ); if ( $child ) { $children[] = $child; } }
         }
         $content = $node['content'] ?? array();
-        if ( preg_match( '/^h[1-6]$/', $tag ) ) { return $this->widget( 'heading', array_merge( $this->map_control_style( $node, 'widget', 'heading' ), array( 'title' => sanitize_text_field( $content['text'] ?? '' ), 'header_size' => $tag ) ) ); }
+        if ( preg_match( '/^h[1-6]$/', $tag ) ) {
+            $rich = (string) ( $content['rich_text'] ?? '' );
+            // Mixed inline markup (accent spans, links) cannot survive a plain
+            // heading title: keep it in a text editor so runs keep styling.
+            if ( '' !== $rich && preg_match( '/<(em|strong|span|a|br|i|b|u|small)\b/i', $rich ) ) {
+                return $this->widget( 'text-editor', array_merge( $this->map_control_style( $node, 'widget', 'text-editor' ), array( 'editor' => $this->rich_heading_editor( $rich, $tag ) ) ) );
+            }
+            return $this->widget( 'heading', array_merge( $this->map_control_style( $node, 'widget', 'heading' ), array( 'title' => sanitize_text_field( $content['text'] ?? '' ), 'header_size' => $tag ) ) );
+        }
         if ( in_array( $tag, array( 'p', 'blockquote' ), true ) ) { return $this->widget( 'text-editor', array_merge( $this->map_control_style( $node, 'widget', 'text-editor' ), array( 'editor' => wp_kses_post( $content['rich_text'] ?? $content['text'] ?? '' ) ) ) ); }
         if ( in_array( $tag, array( 'a', 'button' ), true ) ) { return $this->widget( 'button', array_merge( $this->map_control_style( $node, 'widget', 'button' ), array( 'text' => sanitize_text_field( $content['text'] ?? '' ), 'link' => array( 'url' => esc_url_raw( $content['link']['url'] ?? '' ), 'is_external' => ! empty( $content['link']['is_external'] ), 'nofollow' => ! empty( $content['link']['nofollow'] ) ) ) ) ); }
         if ( 'form' === $tag ) { return $this->map_form_widget( $node ); }
@@ -292,6 +300,24 @@ class Design_Core_Elementor_Mapping_Engine {
             $settings = Design_Core_Elementor_Binding_Governor::govern_settings( 'container', '', is_array( $settings ) ? $settings : array(), $this->control_mapper ? $this->control_mapper->registry() : null, $notes );
         }
         return array('id'=>$this->element_id(),'elType'=>'container','isInner'=>false,'settings'=>$settings,'elements'=>array_values($children));
+    }
+    /**
+     * Designer-authored heading markup keeps its inline runs (accent spans,
+     * links, breaks). Only text-level tags survive, with designer styles
+     * intact -- the source file itself is the trust boundary here.
+     */
+    private function rich_heading_editor( $html, $tag ) {
+        $allowed = array(
+            'h1' => array(), 'h2' => array(), 'h3' => array(), 'h4' => array(), 'h5' => array(), 'h6' => array(),
+            'em' => array( 'style' => true, 'class' => true ), 'i' => array( 'style' => true, 'class' => true ),
+            'strong' => array( 'style' => true, 'class' => true ), 'b' => array( 'style' => true, 'class' => true ),
+            'u' => array( 'style' => true, 'class' => true ), 'small' => array( 'style' => true, 'class' => true ),
+            'span' => array( 'style' => true, 'class' => true ), 'br' => array(),
+            'a' => array( 'href' => true, 'title' => true, 'target' => true, 'rel' => true, 'style' => true, 'class' => true ),
+        );
+        $tag = in_array( $tag, array( 'h1', 'h2', 'h3', 'h4', 'h5', 'h6' ), true ) ? $tag : 'h2';
+        if ( ! preg_match( '/^\s*<' . $tag . '\b/i', (string) $html ) ) { $html = '<' . $tag . '>' . $html . '</' . $tag . '>'; }
+        return wp_kses( (string) $html, $allowed );
     }
     private function widget( $widget_type, $settings ) {
         if ( class_exists( 'Design_Core_Elementor_Binding_Governor' ) ) {

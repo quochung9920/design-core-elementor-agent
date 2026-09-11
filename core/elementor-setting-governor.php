@@ -23,7 +23,14 @@ class Design_Core_Elementor_Elementor_Setting_Governor {
 
     public function govern( $element_type, $widget_type, array $settings, array $node = array(), $creating = true ) {
         $warnings = $this->dimension_warnings( $settings ); $applied = array();
-        if ( 'container' === sanitize_key( (string) $element_type ) && 'grid' === strtolower( (string) ( $node['layout']['display'] ?? '' ) ) ) {
+        $display = strtolower( (string) ( $node['layout']['display'] ?? '' ) );
+        if ( 'container' === sanitize_key( (string) $element_type ) && 'flex' === $display && empty( $node['layout']['direction'] ) ) {
+            // CSS flex defaults to row, but Elementor containers default to
+            // column. Without an explicit direction every row layout stacks.
+            $dir_control = $this->registry->first_supported( 'container', '', array( 'flex_direction' ) );
+            if ( $dir_control && ! array_key_exists( $dir_control, $settings ) ) { $settings[ $dir_control ] = 'row'; $applied[] = $dir_control; }
+        }
+        if ( 'container' === sanitize_key( (string) $element_type ) && 'grid' === $display ) {
             $result = $this->govern_grid( $settings, $node, (bool) $creating );
             $settings = $result['settings']; $warnings = array_merge( $warnings, $result['warnings'] ); $applied = $result['applied'];
         }
@@ -84,6 +91,12 @@ class Design_Core_Elementor_Elementor_Setting_Governor {
         // A grid container carrying its own track template must therefore be
         // full-width, with the IR max-width re-expressed as centering CSS.
         $has_template = isset( $settings['custom_css'] ) && false !== strpos( (string) $settings['custom_css'], 'grid-template' );
+        $grid_align = strtolower( (string) ( $node['layout']['align'] ?? '' ) );
+        if ( in_array( $grid_align, array( 'center', 'start', 'end', 'stretch', 'baseline' ), true ) ) {
+            // align-items positions grid items on the block axis (vertical
+            // centering for row grids). No native grid control carries it.
+            $settings['custom_css'] = trim( (string) ( $settings['custom_css'] ?? '' ) ) . "\nselector{align-items:" . $grid_align . ";}";
+        }
         if ( $has_template ) {
             $width_control = $this->registry->first_supported( 'container', '', array( 'content_width' ) );
             if ( $width_control ) { $settings[ $width_control ] = 'full'; $applied[] = $width_control; }

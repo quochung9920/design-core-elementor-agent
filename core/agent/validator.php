@@ -281,7 +281,7 @@ final class Design_Core_Agent_Validator {
             if ( ! is_string( $value ) ) { $this->issue( $issues, $path, 'type', 'Expected a string.' ); return; }
             if ( function_exists( 'wp_kses_post' ) && wp_kses_post( $value ) !== $value ) { $this->issue( $issues, $path, 'unsafe_markup', 'Content would be changed by WordPress HTML sanitization; correct it before writing.' ); }
             if ( preg_match( '/<(?:script|style|iframe|object|embed|form|input)\b|\bon[a-z]+\s*=|javascript\s*:/i', $value ) ) { $this->issue( $issues, $path, 'executable_content', 'Executable/interactive markup is not permitted in content settings.' ); }
-            if ( preg_match( '/<(?:div|section|article|nav|table|header|footer|main)\b|\b(?:style|class)\s*=/i', $value ) ) { $this->issue( $issues, $path, 'layout_in_richtext', 'Use native elements or a reviewed component instead of layout markup inside a text setting.' ); }
+            if ( preg_match( '/<(?:div|section|article|nav|table|header|footer|main|script|style|iframe|object|embed|form|input|button)\b|\bon[a-z]+\s*=|javascript\s*:/i', $value ) ) { $this->issue( $issues, $path, 'layout_in_richtext', 'Use native elements or a reviewed component instead of layout markup inside a text setting.' ); }
             if ( 'color' === $type && '' !== $value && ! preg_match( '/^(?:#[a-f0-9]{3,8}|(?:rgb|hsl)a?\([0-9.%\s,\/+\-]+\)|transparent|currentColor)$/i', $value ) ) { $this->issue( $issues, $path, 'color', 'Color requires a recognized literal or a verified global binding.' ); }
             return;
         }

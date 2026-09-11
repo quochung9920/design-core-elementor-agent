@@ -255,7 +255,10 @@ class Design_Core_Elementor_Binding_Governor {
      */
     public static function sanitize_richtext( $html ) {
         $html = (string) $html;
-        if ( ! preg_match( '/<(?:div|section|article|nav|table|header|footer|main)\b|\b(?:style|class)\s*=/i', $html ) ) {
+        // Structural layout tags and executable content never belong inside a
+        // text setting. Designer text-level markup (spans, emphasis, links)
+        // with styles is legitimate typography and survives.
+        if ( ! preg_match( '/<(?:div|section|article|nav|table|header|footer|main|script|style|iframe|object|embed|form|input|button)\b|\bon[a-z]+\s*=|javascript\s*:/i', $html ) ) {
             return array( $html, false );
         }
         $text = trim( wp_strip_all_tags( $html ) );

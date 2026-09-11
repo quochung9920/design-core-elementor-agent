@@ -309,7 +309,7 @@ class Design_Core_Elementor_Analysis_Engine {
             'id' => $id,
             'source' => array( 'tag' => $tag, 'classes' => array_map( 'sanitize_html_class', $classes ), 'attributes' => $attributes, 'dom_path' => $path ),
             'semantic' => array( 'role' => $role, 'component_type' => in_array( $role, array( 'feature-card', 'testimonial', 'cta', 'pricing', 'product' ), true ) ? $role : '', 'confidence' => 0.8 ),
-            'content' => array( 'text' => trim( $element->textContent ), 'rich_text' => in_array( $tag, array( 'p', 'blockquote' ), true ) ? $element->ownerDocument->saveHTML( $element ) : '', 'link' => $link, 'image' => $image, 'list' => $list, 'fields' => array() ),
+            'content' => array( 'text' => trim( $element->textContent ), 'rich_text' => in_array( $tag, array( 'p', 'blockquote', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6' ), true ) ? $element->ownerDocument->saveHTML( $element ) : '', 'link' => $link, 'image' => $image, 'list' => $list, 'fields' => array() ),
             'layout' => $desktop['layout'], 'style' => $desktop['style'], 'spacing' => $desktop['spacing'], 'responsive' => $normalized_responsive,
             'assets' => $image ? array( 'images' => array( $image ) ) : array(), 'interaction' => array(),
             'component' => array( 'fingerprint' => array( 'version' => 2, 'semantic' => $role, 'structure' => $structure, 'content_schema' => $content_schema, 'layout' => (string) ( $desktop['layout']['display'] ?? '' ), 'interaction' => '' ), 'repeated' => false, 'reusable' => (bool) ( $element->getAttribute( 'class' ) ), 'dynamic' => $this->has_dynamic_evidence( $element, $role ), 'content_schema' => $content_schema ),

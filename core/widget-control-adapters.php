@@ -243,6 +243,7 @@ class Design_Core_Elementor_Container_Control_Adapter extends Design_Core_Elemen
 
 class Design_Core_Elementor_Heading_Control_Adapter extends Design_Core_Elementor_Abstract_Control_Adapter {
     protected $element_type = 'widget'; protected $widget_type = 'heading';
+    public function map( $node ) { return parent::map( $this->without_flex_align( $node ) ); }
     protected function semantic_map() { return array(
         'color' => array( array( 'title_color', 'text_color' ), 'raw', 'color' ),
         'align' => array( array( 'align' ), 'raw' ),
@@ -256,6 +257,7 @@ class Design_Core_Elementor_Text_Control_Adapter extends Design_Core_Elementor_A
     protected $element_type = 'widget'; protected $widget_type = 'text-editor';
 
     public function map( $node ) {
+        $node = $this->without_flex_align( $node );
         $result = parent::map( $node );
         if ( isset( $result['settings']['_element_custom_width'] ) && $this->registry->first_supported( $this->element_type, $this->widget_type, array( '_element_width' ), 'select' ) ) {
             $result['settings']['_element_width'] = 'initial';
@@ -276,6 +278,7 @@ class Design_Core_Elementor_Text_Control_Adapter extends Design_Core_Elementor_A
 class Design_Core_Elementor_Button_Control_Adapter extends Design_Core_Elementor_Abstract_Control_Adapter {
     protected $element_type = 'widget'; protected $widget_type = 'button';
     public function map( $node ) {
+        $node = $this->without_flex_align( $node );
         $result = parent::map( $node );
         // The button widget schema exposes no min-height control. Express the
         // authored minimum height on the rendered button itself: min-height on
