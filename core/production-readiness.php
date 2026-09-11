@@ -27,11 +27,6 @@ class Design_Core_Elementor_Production_Readiness {
         $checks['elementor_setting_governor_v1'] = $this->check( class_exists( 'Design_Core_Elementor_Elementor_Setting_Governor' ) && 1 === Design_Core_Elementor_Elementor_Setting_Governor::VERSION, 'Runtime-aware Elementor setting governor v1 is active.' );
         $checks['benchmark_corpus_v1'] = $this->check( class_exists( 'Design_Core_Elementor_Design_Benchmark_Corpus' ) && 1 === Design_Core_Elementor_Design_Benchmark_Corpus::VERSION, 'Fidelity benchmark corpus v1 is active.' );
         $checks['section_explainability'] = $this->check( class_exists( 'Design_Core_Elementor_Section_Explainability' ), 'Section Registry explainability is active.' );
-        $checks['agent_gateway'] = $this->check( class_exists( 'Design_Core_Elementor_Agent_Gateway' ) && 2 === Design_Core_Elementor_Agent_Gateway::VERSION, 'Compact Design Core agent gateway v2 is active.' );
-        $checks['remote_api_v2'] = $this->check(
-            class_exists( 'Design_Core_Elementor_Rest_Controller_V2' ) && class_exists( 'Design_Core_Elementor_Machine_Credential_Registry' ) && class_exists( 'Design_Core_Elementor_Preview_Ticket_Store' ) && class_exists( 'Design_Core_Elementor_Idempotency_Store' ) && (int) get_option( Design_Core_Elementor_Capabilities::OPTION_VERSION, 0 ) >= Design_Core_Elementor_Capabilities::VERSION,
-            'rc21 Remote API v2 (machine credentials, preview approval, idempotency, scoped capabilities) is active.'
-        );
         $checks['strategy_contract'] = $this->check( interface_exists( 'Design_Core_Elementor_Strategy_Executor_Interface' ), 'Strategy executor contract is active.' );
         $checks['global_sync'] = $this->check( ! empty( $capabilities['capabilities']['kit_global_sync'] ) || ! empty( $capabilities['capabilities']['atomic_manage_classes'] ), 'Elementor global design-system bridge is available.' );
         $checks['atomic_runtime'] = $this->check( 'v3' === ( $capabilities['elementor']['editor_mode'] ?? 'v3' ) || ! empty( $capabilities['capabilities']['atomic_build_composition'] ), 'Atomic composition API is available when V4 is active.' );
@@ -42,8 +37,6 @@ class Design_Core_Elementor_Production_Readiness {
         $checks['browser_analysis'] = $this->check( ! empty( $capabilities['capabilities']['browser_analysis'] ), 'Browser computed-style analysis is available.', false );
         $checks['figma_transport_configured'] = $this->check( class_exists( 'Design_Core_Elementor_Figma_Transport' ) && ( new Design_Core_Elementor_Figma_Transport() )->configured(), 'Figma access token is configured for direct URL reads.', false );
         $checks['loop_runtime'] = $this->check( ! empty( $capabilities['capabilities']['loop'] ), 'Loop runtime is available.', false );
-        $checks['abilities_api'] = $this->check( function_exists( 'wp_register_ability' ), 'WordPress Abilities API is available for the optional MCP/agent bridge.', false );
-        $checks['official_wordpress_mcp_adapter'] = $this->check( defined( 'WORDPRESS_MCP_ADAPTER_VERSION' ), 'Official WordPress MCP Adapter is installed; Design Core safe read/preview abilities can be exposed through it.', false );
         $checks['sabberworm_css_parser'] = $this->check( class_exists( '\\Sabberworm\\CSS\\Parser' ), 'sabberworm/php-css-parser is loaded; CSS AST normalization uses the external standards-aware parser.', false );
 
         $required_failed = 0; foreach ( $checks as $check ) { if ( $check['required'] && ! $check['pass'] ) { $required_failed++; } }

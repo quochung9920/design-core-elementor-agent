@@ -18,13 +18,10 @@ class Design_Core_Elementor_Plugin {
     private function register_hooks() {
         add_action( 'admin_menu', array( $this, 'register_admin_menu' ) );
         add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_assets' ) );
-        add_action( 'rest_api_init', array( $this, 'register_rest_routes' ) );
         add_action( 'elementor/elements/categories_registered', array( $this, 'register_elementor_category' ) );
         add_action( 'elementor/widgets/register', array( $this, 'register_elementor_widgets' ) );
         add_action( 'elementor/frontend/after_register_scripts', array( $this, 'register_frontend_assets' ) );
         add_action( 'elementor/frontend/after_register_styles', array( $this, 'register_frontend_assets' ) );
-        add_action( 'wp_abilities_api_categories_init', array( $this, 'register_ability_category' ) );
-        add_action( 'wp_abilities_api_init', array( $this, 'register_abilities' ) );
     }
 
     private function ensure_registry_defaults() {
@@ -53,7 +50,6 @@ class Design_Core_Elementor_Plugin {
         add_submenu_page( 'design-core-elementor', 'Registry', 'Registry', 'manage_options', 'design-core-registry', array( $this, 'render_registry_page' ) );
         add_submenu_page( 'design-core-elementor', 'History', 'History', 'manage_options', Design_Core_Elementor_Intelligence_Admin::HISTORY_SLUG, array( $this, 'render_history_page' ) );
         add_submenu_page( 'design-core-elementor', 'Agent Bridge', 'Agent Bridge', 'manage_options', Design_Core_Elementor_Intelligence_Admin::AGENT_SLUG, array( $this, 'render_agent_page' ) );
-        add_submenu_page( 'design-core-elementor', 'Remote Access', 'Remote Access', 'manage_options', Design_Core_Elementor_Remote_Access_Admin::SLUG, array( $this, 'render_remote_access_page' ) );
         add_submenu_page( 'design-core-elementor', 'Settings', 'Settings', 'manage_options', 'design-core-settings', array( $this, 'render_settings_page' ) );
         add_submenu_page( 'design-core-elementor', 'Production Readiness', 'Production Readiness', 'manage_options', 'design-core-readiness', array( $this, 'render_readiness_page' ) );
     }
@@ -71,16 +67,9 @@ class Design_Core_Elementor_Plugin {
         wp_register_script( 'design-core-global-time-bar', DESIGN_CORE_ELEMENTOR_URL . 'assets/global-time-bar.js', array(), DESIGN_CORE_ELEMENTOR_VERSION, true );
     }
     public function register_rest_routes() {
-        ( new Design_Core_Elementor_Rest_Controller() )->register_routes();
-        if ( class_exists( 'Design_Core_Elementor_Rest_Controller_V2' ) ) { ( new Design_Core_Elementor_Rest_Controller_V2() )->register_routes(); }
+        // REST API removed: local-only build. Kept as no-op for backward compatibility.
     }
     public function register_elementor_category( $manager ) { $manager->add_category( 'design-core', array( 'title'=>'Design Core', 'icon'=>'eicon-kit' ) ); }
-    public function register_ability_category() { if ( class_exists( 'Design_Core_Elementor_Agent_Gateway' ) ) { ( new Design_Core_Elementor_Agent_Gateway() )->register_ability_category(); } }
-    public function register_abilities() {
-        if ( class_exists( 'Design_Core_Elementor_Agent_Gateway' ) ) { ( new Design_Core_Elementor_Agent_Gateway() )->register_abilities(); }
-        if ( class_exists( 'Design_Core_Elementor_WordPress_MCP_Compatibility' ) ) { ( new Design_Core_Elementor_WordPress_MCP_Compatibility() )->register_abilities(); }
-        if ( class_exists( 'Design_Core_Elementor_MCP_Ability_Bridge' ) ) { ( new Design_Core_Elementor_MCP_Ability_Bridge() )->register_abilities(); }
-    }
 
     public function register_elementor_widgets( $widgets_manager ) {
         self::require_widget_base_classes();
@@ -105,7 +94,6 @@ class Design_Core_Elementor_Plugin {
     public function render_benchmarks_page() { ( new Design_Core_Elementor_Intelligence_Admin() )->render_benchmarks_page(); }
     public function render_history_page() { ( new Design_Core_Elementor_Intelligence_Admin() )->render_history_page(); }
     public function render_agent_page() { ( new Design_Core_Elementor_Intelligence_Admin() )->render_agent_page(); }
-    public function render_remote_access_page() { ( new Design_Core_Elementor_Remote_Access_Admin() )->render_page(); }
     public function render_settings_page() { ( new Design_Core_Elementor_Settings() )->render_settings_page(); }
 
     public function render_admin_page() {

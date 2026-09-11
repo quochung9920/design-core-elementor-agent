@@ -134,7 +134,7 @@ final class Design_Core_Elementor_Design_Runs_Admin {
             echo '</tr>';
         }
         echo '</tbody></table>';
-        if ( ! empty( $result['has_more'] ) ) { echo '<p><em>More events exist; use the MCP events ability for paginated retrieval.</em></p>'; }
+        if ( ! empty( $result['has_more'] ) ) { echo '<p><em>More events exist; narrow the run filter to paginate.</em></p>'; }
     }
 
     private static function render_components( $run_id ) {

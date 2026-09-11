@@ -65,8 +65,8 @@ class Design_Core_Elementor_Agent_Draft_Writes {
      *   service is unavailable (fail closed).
      */
     public static function plugin_environment() {
-        if ( class_exists( 'Design_Core_Elementor_Remote_Settings' ) ) {
-            return (string) Design_Core_Elementor_Remote_Settings::environment();
+        if ( function_exists( 'wp_get_environment_type' ) ) {
+            return (string) wp_get_environment_type();
         }
         return 'production';
     }

@@ -149,13 +149,9 @@ class Design_Core_Elementor_Intelligence_Admin {
 
     public function render_agent_page() {
         if ( ! current_user_can( 'manage_options' ) ) { return; }
-        $gateway = new Design_Core_Elementor_Agent_Gateway(); $catalog = $gateway->catalog();
         $figma = new Design_Core_Elementor_Figma_Transport();
-        echo '<div class="wrap design-core-admin-shell design-core-intelligence-page"><h1>Agent Bridge v' . esc_html( (string) Design_Core_Elementor_Agent_Gateway::VERSION ) . '</h1><p>Compact discover → schema → execute tool surface shared by REST and optional WordPress Abilities.</p>';
-        echo '<div class="design-core-card"><h2>Runtime</h2><p>Abilities API: <strong>' . esc_html( function_exists( 'wp_register_ability' ) ? 'available' : 'not available on this WordPress version' ) . '</strong> · REST gateway: <strong>available</strong> · Figma transport: <strong>' . esc_html( $figma->configured() ? 'configured' : 'not configured' ) . '</strong></p></div>';
-        echo '<table class="widefat striped"><thead><tr><th>Tool</th><th>Description</th><th>Read-only</th><th>Destructive</th></tr></thead><tbody>';
-        foreach ( $catalog['tools'] as $tool ) { echo '<tr><td><code>' . esc_html( $tool['name'] ) . '</code></td><td>' . esc_html( $tool['description'] ) . '</td><td>' . esc_html( $tool['readonly'] ? 'Yes' : 'No' ) . '</td><td>' . esc_html( $tool['destructive'] ? 'Yes' : 'No' ) . '</td></tr>'; }
-        echo '</tbody></table></div>';
+        echo '<div class="wrap design-core-admin-shell design-core-intelligence-page"><h1>Agent Bridge (local-only)</h1><p>Remote gateway, REST and Abilities bridge removed in this build. Local conversion pipeline remains available via WP-CLI and admin UI.</p>';
+        echo '<div class="design-core-card"><h2>Runtime</h2><p>Figma transport: <strong>' . esc_html( $figma->configured() ? 'configured' : 'not configured' ) . '</strong></p></div></div>';
     }
 
     private function render_preview_result( $result ) {

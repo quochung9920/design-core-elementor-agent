@@ -89,8 +89,9 @@ final class Design_Core_Agent_Plans {
     public function apply_draft( array $input, array $principal = array() ) {
         if ( ! Design_Core_Elementor_Agent_Draft_Writes::enabled() ) { return Design_Core_Agent_Contract::error( 'writes_disabled', 'Draft writes require explicit server-side enablement after runtime acceptance tests.', 423 ); }
         if ( true !== ( $input['confirm'] ?? false ) ) { return Design_Core_Agent_Contract::error( 'confirm', 'Explicit confirm=true is required.' ); }
-        foreach ( array( Design_Core_Elementor_Remote_Write_Guard::ensure_writes_enabled(), Design_Core_Elementor_Remote_Write_Guard::ensure_credential_environment_match( $principal ) ) as $guard ) { if ( is_wp_error( $guard ) ) { return $guard; } }
-        if ( ! in_array( Design_Core_Elementor_Remote_Settings::environment(), array( 'staging', 'development', 'local', 'test' ), true ) ) { return Design_Core_Agent_Contract::error( 'environment', 'This release only permits draft writes in non-production environments.', 403 ); }
+        if ( ! current_user_can( 'manage_options' ) ) { return Design_Core_Agent_Contract::error( 'permission', 'Permission denied.', 403 ); }
+        $env = function_exists( 'wp_get_environment_type' ) ? (string) wp_get_environment_type() : 'production';
+        if ( ! in_array( $env, array( 'staging', 'development', 'local', 'test' ), true ) ) { return Design_Core_Agent_Contract::error( 'environment', 'This release only permits draft writes in non-production environments.', 403 ); }
         $artifact = $this->get( $input['preview_id'], 'preview' ); if ( is_wp_error( $artifact ) ) { return $artifact; }
         $hash = $artifact['artifact_hash']; unset( $artifact['artifact_hash'] );
         if ( ! hash_equals( $hash, (string) $input['artifact_hash'] ) || ! hash_equals( $hash, Design_Core_Agent_Contract::hash( $artifact ) ) ) { return Design_Core_Agent_Contract::error( 'artifact_mismatch', 'Preview artifact hash mismatch.', 409 ); }
@@ -148,8 +149,9 @@ final class Design_Core_Agent_Plans {
     public function promote_draft( array $input, array $principal = array() ) {
         if ( ! Design_Core_Elementor_Agent_Draft_Writes::enabled() ) { return Design_Core_Agent_Contract::error( 'writes_disabled', 'Draft writes require explicit server-side enablement after runtime acceptance tests.', 423 ); }
         if ( true !== ( $input['confirm'] ?? false ) ) { return Design_Core_Agent_Contract::error( 'confirm', 'Explicit confirm=true is required.' ); }
-        foreach ( array( Design_Core_Elementor_Remote_Write_Guard::ensure_writes_enabled(), Design_Core_Elementor_Remote_Write_Guard::ensure_credential_environment_match( $principal ) ) as $guard ) { if ( is_wp_error( $guard ) ) { return $guard; } }
-        if ( ! in_array( Design_Core_Elementor_Remote_Settings::environment(), array( 'staging', 'development', 'local', 'test' ), true ) ) { return Design_Core_Agent_Contract::error( 'environment', 'This release only permits promotion in non-production environments.', 403 ); }
+        if ( ! current_user_can( 'manage_options' ) ) { return Design_Core_Agent_Contract::error( 'permission', 'Permission denied.', 403 ); }
+        $env = function_exists( 'wp_get_environment_type' ) ? (string) wp_get_environment_type() : 'production';
+        if ( ! in_array( $env, array( 'staging', 'development', 'local', 'test' ), true ) ) { return Design_Core_Agent_Contract::error( 'environment', 'This release only permits promotion in non-production environments.', 403 ); }
         $artifact = $this->get( $input['preview_id'], 'preview' ); if ( is_wp_error( $artifact ) ) { return $artifact; }
         $hash = $artifact['artifact_hash']; unset( $artifact['artifact_hash'] );
         if ( ! hash_equals( $hash, (string) $input['artifact_hash'] ) || ! hash_equals( $hash, Design_Core_Agent_Contract::hash( $artifact ) ) ) { return Design_Core_Agent_Contract::error( 'artifact_mismatch', 'Preview artifact hash mismatch.', 409 ); }

@@ -1,7 +1,7 @@
 <?php
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-/** Registers the Design Intelligence REST routes and a small inspection/recommendation UI. */
+/** Local Design Intelligence inspection/recommendation UI (REST removed). */
 class Design_Core_Elementor_Design_Intelligence_Admin {
     const SLUG = 'design-core-design-intelligence';
     private static $booted = false;
@@ -9,12 +9,7 @@ class Design_Core_Elementor_Design_Intelligence_Admin {
     public static function boot() {
         if ( self::$booted ) { return; }
         self::$booted = true;
-        add_action( 'rest_api_init', array( __CLASS__, 'register_rest_routes' ) );
         add_action( 'admin_menu', array( __CLASS__, 'register_admin_menu' ), 20 );
-    }
-
-    public static function register_rest_routes() {
-        ( new Design_Core_Elementor_Design_Intelligence_Rest_Controller() )->register_routes();
     }
 
     public static function register_admin_menu() {
