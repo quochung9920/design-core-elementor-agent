@@ -1,12 +1,14 @@
 # RC25 Fidelity Hardening
 
-RC25 tightens the Figma -> Elementor path around the failures that are easiest to miss in an IR-only test: composite icons becoming containers, correct-looking elements living under the wrong parent, fallback fonts masquerading as authored typography, stale source-scoped Design Memory, and screenshot scores hiding regional mismatches.
+RC25 tightens the Figma -> Elementor path around the failures that are easiest to miss in an IR-only test: composite icons becoming containers, transformed image crops being guessed, correct-looking elements living under the wrong parent, fallback fonts masquerading as authored typography, stale source-scoped Design Memory, and screenshot scores hiding regional mismatches.
 
 ## Compiler changes
 
 - `Figma_Vector_Asset_Resolver` discovers small vector-only INSTANCE/COMPONENT/FRAME/GROUP composites and painted primitives by geometry/type/paint evidence. Successfully exported composites are collapsed to one exact SVG media leaf before Design IR lowering.
-- Figma transport source identity now includes the Figma version and a selected-node structural hash. Source-scoped memory therefore changes when the selected node actually changes.
-- strict prepare fails closed when vector/icon candidates are discovered but not exported; silent icon loss is not accepted.
+- `Figma_Raster_Asset_Resolver` detects simple leaf IMAGE paints whose visual result depends on Figma `STRETCH`/`imageTransform`, filters or rotation. These atoms are rendered by Figma as PNG and rebound to the original source node, avoiding guessed CSS crop/focal values.
+- Transformed raster export is deliberately conservative: child-bearing, multi-paint, stroked or effected nodes remain structural so Design Core does not double-render decoration.
+- Figma transport source identity now includes the Figma version and a selected-node structural hash. Source-scoped memory therefore changes when the selected source revision changes.
+- strict prepare fails closed when required vector/icon or transformed-raster candidates are discovered but cannot be exported; silent asset loss or crop guessing is not accepted.
 
 ## Render verification
 
@@ -14,7 +16,8 @@ The browser analyzer schema now records:
 
 - exact Figma class and nearest Figma parent class;
 - owning Elementor ID and parent Elementor owner ID;
-- primary computed font family and `document.fonts.check()` proof;
+- primary computed font family;
+- FontFaceSet declaration/check evidence plus a bounded glyph-metric fallback proof;
 - geometry and computed styles as before.
 
 `Figma_Geometry_Verifier` remains the exact x/y/width/height verifier. RC25 adds:
@@ -43,7 +46,7 @@ Generic rendered-reference comparison still checks element count, section order,
 
 Design Memory remains bounded and accepts only verified lessons. RC25 adds:
 
-- source fingerprints that include structural revision evidence;
+- revision-aware source fingerprints;
 - min/max Design Core version compatibility;
 - Fidelity Rule Registry version compatibility;
 - explicit structure/font failure signatures;
@@ -56,13 +59,14 @@ A quality-gate failure is passed to the learning engine as a failed observation.
 A strict Figma build is not complete merely because Elementor storage is valid. The final state must have:
 
 1. complete required vector exports;
-2. exact persisted Elementor tree reload;
-3. Figma reference screenshot above threshold;
-4. exact Figma-node geometry evidence;
-5. exact Figma parent-ownership evidence;
-6. authored font proof where typography exists;
-7. responsive runtime safety or stronger responsive reference evidence;
-8. architecture quality gate PASS.
+2. complete required transformed-raster exports;
+3. exact persisted Elementor tree reload;
+4. Figma reference screenshot above threshold;
+5. exact Figma-node geometry evidence;
+6. exact Figma parent-ownership evidence;
+7. authored font proof where typography exists;
+8. responsive runtime safety or stronger responsive reference evidence;
+9. architecture quality gate PASS.
 
 Run the authoritative local validation before merge:
 
