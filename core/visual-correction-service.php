@@ -1,9 +1,9 @@
 <?php
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-/** Governed compare -> correct -> verify loop. */
+/** Governed compare -> correct -> verify loop with verified-learning handoff. */
 class Design_Core_Elementor_Visual_Correction_Service {
-    const VERSION = 2;
+    const VERSION = 3;
 
     public function run( $reference_target, $candidate_target, $max_iterations = 3, $target_similarity = 0.95, array $context = array() ) {
         $history = array();
@@ -14,13 +14,19 @@ class Design_Core_Elementor_Visual_Correction_Service {
         if ( $page_id > 0 && ! $this->candidate_matches_page( (string) $candidate_target, $page_id ) ) {
             return new WP_Error( 'design_core_visual_correction_candidate_mismatch', 'Automatic correction refused because the candidate target could not be proven to represent the requested Elementor page.' );
         }
+        $context['page_id'] = $page_id;
 
         for ( $iteration = 1; $iteration <= $max_iterations; $iteration++ ) {
             $feedback_context = array_merge( $context, array( 'page_id' => $page_id, 'target_similarity' => (float) $target_similarity ) );
             $feedback = $engine->evaluate_targets( $reference_target, $candidate_target, $feedback_context );
             if ( is_wp_error( $feedback ) ) { return $feedback; }
             $entry = array( 'iteration' => $iteration, 'feedback' => $feedback, 'application' => array() );
-            if ( 'pass' === ( $feedback['status'] ?? '' ) ) { $history[] = $entry; return array( 'version' => self::VERSION, 'status' => 'pass', 'iterations' => $history, 'similarity' => (float) ( $feedback['similarity'] ?? 0 ) ); }
+            if ( 'pass' === ( $feedback['status'] ?? '' ) ) {
+                $history[] = $entry;
+                $result = array( 'version' => self::VERSION, 'status' => 'pass', 'iterations' => $history, 'similarity' => (float) ( $feedback['similarity'] ?? 0 ) );
+                $result['learning'] = $this->learn_verified_roundtrip( $history, $context, (float) $target_similarity );
+                return $result;
+            }
 
             $directives = (array) ( $feedback['correction_plan'] ?? array() );
             $application = null;
@@ -38,7 +44,7 @@ class Design_Core_Elementor_Visual_Correction_Service {
             }
             $history[] = $entry;
             if ( ! $applied ) {
-                return array(
+                $result = array(
                     'version' => self::VERSION,
                     'status' => 'needs-correction',
                     'iterations' => $history,
@@ -46,10 +52,80 @@ class Design_Core_Elementor_Visual_Correction_Service {
                     'directives' => $directives,
                     'reason' => $page_id <= 0 ? 'Candidate URL could not be resolved to an Elementor page for governed correction.' : 'No runtime-verified control changes could be applied.',
                 );
+                $this->record_failed_roundtrip( $result, $context );
+                return $result;
             }
         }
         $last = end( $history ); $feedback = (array) ( $last['feedback'] ?? array() );
-        return array( 'version' => self::VERSION, 'status' => 'max-iterations', 'iterations' => $history, 'similarity' => (float) ( $feedback['similarity'] ?? 0 ), 'directives' => (array) ( $feedback['correction_plan'] ?? array() ) );
+        $result = array( 'version' => self::VERSION, 'status' => 'max-iterations', 'iterations' => $history, 'similarity' => (float) ( $feedback['similarity'] ?? 0 ), 'directives' => (array) ( $feedback['correction_plan'] ?? array() ) );
+        $this->record_failed_roundtrip( $result, $context );
+        return $result;
+    }
+
+    /**
+     * Create one lesson per applied directive only after the final compare passes.
+     * This prevents a successful unrelated edit from blessing a failed directive.
+     */
+    private function learn_verified_roundtrip( array $history, array $context, $target_similarity ) {
+        if ( ! class_exists( 'Design_Core_Elementor_Correction_Learning_Engine' ) || count( $history ) < 2 ) { return array(); }
+        $first = reset( $history ); $last = end( $history );
+        $before = (float) ( $first['feedback']['similarity'] ?? 0 );
+        $after = (float) ( $last['feedback']['similarity'] ?? 0 );
+        $results = array();
+        foreach ( $history as $entry ) {
+            if ( empty( $entry['application'] ) || 'applied' !== ( $entry['application']['status'] ?? '' ) ) { continue; }
+            foreach ( (array) ( $entry['feedback']['correction_plan'] ?? array() ) as $directive ) {
+                if ( ! is_array( $directive ) ) { continue; }
+                $directive_context = array_merge( $context, array(
+                    'source_type' => sanitize_key( (string) ( $context['source_type'] ?? 'rendered' ) ),
+                    'category' => sanitize_key( (string) ( $directive['category'] ?? $directive['type'] ?? 'visual-correction' ) ),
+                    'property' => sanitize_key( (string) ( $directive['property'] ?? $directive['target_property'] ?? '' ) ),
+                    'widget_type' => sanitize_key( (string) ( $directive['widget_type'] ?? '' ) ),
+                    'node_type' => sanitize_key( (string) ( $directive['node_type'] ?? '' ) ),
+                ) );
+                $results[] = ( new Design_Core_Elementor_Correction_Learning_Engine() )->learn( array(
+                    'status' => 'verified',
+                    'before_score' => $before,
+                    'after_score' => $after,
+                    'target_similarity' => (float) $target_similarity,
+                    'context' => $directive_context,
+                    'correction' => $directive,
+                    'quality_gate' => array( 'publishable' => true ),
+                ) );
+            }
+        }
+        return array_values( array_filter( $results, static fn( $result ) => ! is_wp_error( $result ) ) );
+    }
+
+    private function record_failed_roundtrip( array $result, array $context ) {
+        if ( ! class_exists( 'Design_Core_Elementor_Design_Memory_Store' ) ) { return; }
+        $directives = (array) ( $result['directives'] ?? array() );
+        if ( ! $directives ) {
+            ( new Design_Core_Elementor_Design_Memory_Store() )->record_incident( array(
+                'signature' => 'rendered.visual-correction.unresolved',
+                'status' => sanitize_key( (string) ( $result['status'] ?? 'failed' ) ),
+                'context' => $context,
+                'after_score' => (float) ( $result['similarity'] ?? 0 ),
+                'reason_not_learned' => sanitize_text_field( (string) ( $result['reason'] ?? 'correction-loop-did-not-pass' ) ),
+            ) );
+            return;
+        }
+        $signature_engine = new Design_Core_Elementor_Failure_Signature_Engine();
+        foreach ( array_slice( $directives, 0, 25 ) as $directive ) {
+            if ( ! is_array( $directive ) ) { continue; }
+            $directive_context = array_merge( $context, array(
+                'category' => $directive['category'] ?? $directive['type'] ?? 'visual-correction',
+                'property' => $directive['property'] ?? $directive['target_property'] ?? '',
+            ) );
+            ( new Design_Core_Elementor_Design_Memory_Store() )->record_incident( array(
+                'signature' => $signature_engine->signature( $directive_context ),
+                'status' => sanitize_key( (string) ( $result['status'] ?? 'failed' ) ),
+                'context' => $directive_context,
+                'after_score' => (float) ( $result['similarity'] ?? 0 ),
+                'correction' => $directive,
+                'reason_not_learned' => sanitize_text_field( (string) ( $result['reason'] ?? 'correction-loop-did-not-pass' ) ),
+            ) );
+        }
     }
 
     private function candidate_matches_page( $candidate_target, $page_id ) {
