@@ -83,7 +83,11 @@ class Design_Core_Elementor_Section_Intelligence {
                 $variant_id = '';
             } elseif ( 'variant' === ( $classification['action'] ?? '' ) ) {
                 $variant_id = $variant_id ?: $this->variant_id( $fingerprint );
-                $this->registry->add_variant( $master['id'], $variant_id, array( 'fingerprint' => $fingerprint, 'blueprint' => $this->capture_blueprint( $node, $by_id ) ) );
+                $definition = array( 'fingerprint' => $fingerprint, 'blueprint' => $this->capture_blueprint( $node, $by_id ) );
+                if ( ! empty( $classification['family_relation'] ) && is_array( $classification['family_relation'] ) ) {
+                    $definition['family_relation'] = $classification['family_relation'];
+                }
+                $this->registry->add_variant( $master['id'], $variant_id, $definition );
                 $master = $this->registry->get( $master['id'] );
                 if ( ! $master ) { throw new RuntimeException( 'Section variant registration lost its master.' ); }
             }

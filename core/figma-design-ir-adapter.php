@@ -82,7 +82,61 @@ class Design_Core_Elementor_Figma_Design_IR_Adapter {
             'sizing'=>array('horizontal'=>sanitize_key((string)($figma['layoutSizingHorizontal']??'')),'vertical'=>sanitize_key((string)($figma['layoutSizingVertical']??''))),'geometry'=>$this->geometry($figma),'style_evidence'=>$this->style_evidence($figma),'text_runs'=>$this->text_runs($figma),
             'variable_refs'=>Design_Core_Elementor_Change_Ledger::transport_safe((array)($figma['_design_core_variable_refs']??array())),'conversion_warnings'=>array_values(array_map('sanitize_text_field',(array)($figma['_design_core_warnings']??array()))),'normalization'=>Design_Core_Elementor_Change_Ledger::transport_safe((array)($figma['_design_core_normalization']??array())),
         );
+        $node=$this->fold_button_instance($figma,$type,$node);
         $this->nodes[$id]=$node;return $id;
+    }
+
+    /**
+     * A component instance that carries exactly one text run plus button-like
+     * chrome (solid background, rounded corners, or a button-ish name) is a
+     * button even though Figma reports no link: fold it into a single anchor
+     * node so the standard button mapping applies. Nested decorative vectors
+     * (e.g. arrow icons) are intentionally dropped in this pass.
+     */
+    private function fold_button_instance(array $figma,$type,array $node){
+        if('INSTANCE'!==$type||empty($node['children'])){return $node;}
+        $texts=$this->collect_texts($node);
+        if(1!==count($texts)){return $node;}
+        $name=strtolower((string)($figma['name']??''));
+        $hint=false!==strpos($name,'button')||false!==strpos($name,'btn')||false!==strpos($name,'cta');
+        $bg=false;
+        foreach((array)($figma['fills']??array()) as $fill){if(is_array($fill)&&false!==($fill['visible']??true)&&'SOLID'===strtoupper((string)($fill['type']??''))){$bg=true;break;}}
+        $radius=is_numeric($figma['cornerRadius']??null)&&(float)$figma['cornerRadius']>0;
+        if(!($hint||$bg||$radius)){return $node;}
+        $text=array_shift($texts);
+        // Detached descendants must leave the node table: the IR validator
+        // rejects nodes unreachable from the roots as orphans.
+        $drop=$this->collect_descendant_ids($node);
+        $node['source']['tag']='a';
+        $node['content']['text']=$text['text'];
+        $node['content']['rich_text']=$text['text'];
+        $node['semantic']['role']='button';
+        $node['children']=array();
+        foreach($drop as $gone){unset($this->nodes[$gone]);}
+        return $node;
+    }
+
+    private function collect_descendant_ids(array $node){
+        $out=array();
+        foreach((array)($node['children']??array()) as $child_id){
+            $out[]=$child_id;
+            if(isset($this->nodes[$child_id])&&is_array($this->nodes[$child_id])){
+                foreach($this->collect_descendant_ids($this->nodes[$child_id]) as $nested){$out[]=$nested;}
+            }
+        }
+        return $out;
+    }
+
+    private function collect_texts(array $node){
+        $out=array();
+        foreach((array)($node['children']??array()) as $child_id){
+            $child=$this->nodes[$child_id]??null;
+            if(!is_array($child)){continue;}
+            $t=trim((string)($child['content']['text']??''));
+            if(''!==$t){$out[]=array('text'=>$t);}
+            foreach($this->collect_texts($child) as $nested){$out[]=$nested;}
+        }
+        return $out;
     }
 
     private function semantic(array $figma,$type){$name=strtolower((string)($figma['name']??''));foreach(array('hero','navigation','footer','header','faq','testimonial','pricing','comparison','process','cta','benefits','services','team','gallery','button','card') as $role){if(false!==strpos($name,$role)){return $role;}}if('TEXT'===$type){$size=(float)($figma['style']['fontSize']??0);return $size>=28?'heading':'text';}if($this->image_fill($figma)){return'media';}if(in_array($type,array('COMPONENT','INSTANCE','COMPONENT_SET'),true)){return sanitize_key($name?:'component');}return in_array($type,array('FRAME','SECTION','GROUP'),true)?'section':strtolower($type);}
