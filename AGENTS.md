@@ -52,9 +52,10 @@ wp design-core figma_build '<FIGMA_URL>' --verify=1
 wp design-core figma_verify '<FIGMA_URL>' '<CANDIDATE_URL>' --page-id=<ID>
 ```
 
-The strict path always requests image fills, vector assets and a Figma-rendered
-reference. If source evidence cannot be obtained, fail closed; do not silently
-replace icons, omit assets or guess a different design.
+The strict path always requests image fills, transformed raster atoms, vector
+assets and a Figma-rendered reference. If source evidence cannot be obtained,
+fail closed; do not silently replace icons, omit assets, guess crop transforms
+or invent a different design.
 
 A persisted Elementor tree is NOT completion. For a Figma task, completion
 requires rendered verification against the Figma reference. If verification
@@ -66,6 +67,10 @@ RC25 strict verification rules:
 - Composite vector/icon nodes must be exported as exact SVG visual atoms when
   the resolver identifies them. Never lower a missing arrow/check/clock/dot into
   a generic container simply because export failed.
+- Simple transformed leaf IMAGE paints (`STRETCH`/`imageTransform`, filters or
+  image rotation) must use Figma's authoritative rendered atom when CSS cannot
+  represent the source transform exactly. Failed required raster export is a
+  blocker, not permission to guess `object-position`.
 - Exact `dc-figma-node-*` identity outranks DOM path/text/index heuristics.
 - Geometry PASS is insufficient when a node belongs to the wrong Figma parent;
   parent-ownership failure requires composition/BuildPlan repair.
