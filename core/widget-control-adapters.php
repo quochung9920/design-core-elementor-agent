@@ -412,6 +412,15 @@ class Design_Core_Elementor_Widget_Control_Mapper {
                     if ( Design_Core_Elementor_Binding_Governor::is_trivial_css( $fallback_property ) || Design_Core_Elementor_Binding_Governor::is_unrepresentable_css( $fallback_property ) ) {
                         unset( $fallback_rules[ $fallback_property ] );
                         $result['dropped_css'][] = (string) $fallback_property;
+                        continue;
+                    }
+                    // Zero-effect values (fit-content heights, zero borders)
+                    // and duplicates already carried by a native setting on
+                    // the same element are dropped, never persisted as CSS.
+                    if ( Design_Core_Elementor_Binding_Governor::is_zero_effect_declaration( $fallback_property, $fallback_value )
+                        || Design_Core_Elementor_Binding_Governor::is_redundant_fallback( $fallback_property, is_array( $result['settings'] ?? null ) ? $result['settings'] : array() ) ) {
+                        unset( $fallback_rules[ $fallback_property ] );
+                        $result['dropped_css'][] = (string) $fallback_property . ':redundant-or-zero-effect';
                     }
                 }
             }

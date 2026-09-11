@@ -250,6 +250,39 @@ class Design_Core_Elementor_Binding_Governor {
     }
 
     /**
+     * Value-aware zero-effect declarations: these render exactly like the
+     * Elementor default, so persisting them only inflates custom CSS output.
+     * - height:fit-content reproduces default block/flex item sizing.
+     * - zero-width borders render nothing on any engine.
+     * - overflow:visible is the initial value.
+     */
+    public static function is_zero_effect_declaration( $property, $value ) {
+        $property = strtolower( trim( (string) $property ) );
+        $value = strtolower( trim( (string) $value ) );
+        if ( 'height' === $property && 'fit-content' === $value ) { return true; }
+        if ( 'border' === $property && preg_match( '/^0(px)?\b/', $value ) ) { return true; }
+        if ( 'overflow' === $property && 'visible' === $value ) { return true; }
+        return false;
+    }
+
+    /**
+     * Fallback declarations already expressed by a native Elementor setting
+     * on the same element. The fallback is a duplicate: the Figma adapter
+     * emits both the native IR key and the CSS safety net, and the adapter
+     * layer maps the native key first. Dropping the duplicate loses nothing.
+     * - border shorthand duplicates native border_width/border_style/border_color.
+     * - height duplicates native min_height carrying the same FIXED Figma height
+     *   (min-height renders identically for content at or below the authored
+     *   height and degrades gracefully above it).
+     */
+    public static function is_redundant_fallback( $property, array $settings ) {
+        $property = strtolower( trim( (string) $property ) );
+        if ( 'border' === $property && isset( $settings['border_width'], $settings['border_color'] ) ) { return true; }
+        if ( 'height' === $property && isset( $settings['min_height'] ) && is_array( $settings['min_height'] ) ) { return true; }
+        return false;
+    }
+
+    /**
      * Strip structural layout markup from rich-text bindings. Text survives;
      * layout ownership stays with native elements. Returns [text, sanitized].
      */
