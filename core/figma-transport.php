@@ -55,6 +55,13 @@ class Design_Core_Elementor_Figma_Transport {
                 $vector_assets = $this->export_nodes( $parsed['file_key'], $vector_ids, 'svg', 1 );
                 if ( is_wp_error( $vector_assets ) ) { $vector_assets = array(); }
             }
+            // Once Figma has rendered a small vector-only composite as an exact
+            // SVG, compile that composite as one media leaf. Keeping its internal
+            // FRAME/RECTANGLE tree as well would recreate the original RC23 bug:
+            // each primitive becomes a stretchable Elementor container.
+            if ( $vector_assets && isset( $payload['document'] ) && is_array( $payload['document'] ) ) {
+                $payload['document'] = $this->collapse_exported_vector_nodes( $payload['document'], array_keys( $vector_assets ) );
+            }
         }
 
         $reference = array();
@@ -153,6 +160,27 @@ class Design_Core_Elementor_Figma_Transport {
             foreach ( $children as $child ) { $queue[] = $child; }
         }
         return array_values( array_unique( $ids ) );
+    }
+
+    private function collapse_exported_vector_nodes( array $node, array $exported_ids ) {
+        $ids = array_fill_keys( array_map( 'strval', $exported_ids ), true );
+        $walk = function ( array $current ) use ( &$walk, $ids ) {
+            $id = (string) ( $current['id'] ?? '' );
+            if ( $id && isset( $ids[ $id ] ) ) {
+                $current['_design_core_original_type'] = (string) ( $current['type'] ?? '' );
+                $current['_design_core_exact_vector_asset'] = true;
+                $current['type'] = 'VECTOR';
+                $current['children'] = array();
+                return $current;
+            }
+            if ( isset( $current['children'] ) && is_array( $current['children'] ) ) {
+                foreach ( $current['children'] as $index => $child ) {
+                    if ( is_array( $child ) ) { $current['children'][ $index ] = $walk( $child ); }
+                }
+            }
+            return $current;
+        };
+        return $walk( $node );
     }
 
     private function request( $path ) {
