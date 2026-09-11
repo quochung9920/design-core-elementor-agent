@@ -3,7 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 /** Converts source/QA evidence into stable, semantic failure-pattern signatures. */
 class Design_Core_Elementor_Failure_Signature_Engine {
-    const VERSION = 1;
+    const VERSION = 2;
 
     public function signals_from_ir( array $ir ) {
         $signals = array();
@@ -24,8 +24,12 @@ class Design_Core_Elementor_Failure_Signature_Engine {
             if ( $this->has_vector_asset( $node, $type ) ) { $signals[] = 'figma.vector-component.asset'; }
             if ( in_array( $role, array( 'button', 'button-composition' ), true ) && $this->subtree_has_media_signal( $node, $ir ) ) { $signals[] = 'figma.button.icon-composition'; }
             if ( $this->is_fixed_media( $node, $sizing, $geo ) ) { $signals[] = 'figma.media.fixed-height'; }
+            if ( $this->has_font_evidence( $node ) ) { $signals[] = 'figma.rendered-font.family'; }
         }
-        if ( 'figma' === sanitize_key( (string) ( $ir['source_name'] ?? '' ) ) ) { $signals[] = 'figma.rendered-node.geometry'; }
+        if ( 'figma' === sanitize_key( (string) ( $ir['source_name'] ?? '' ) ) ) {
+            $signals[] = 'figma.rendered-node.geometry';
+            $signals[] = 'figma.rendered-node.parent';
+        }
         return array_values( array_unique( array_filter( array_map( array( 'Design_Core_Elementor_Design_Memory_Store', 'signature_key' ), $signals ) ) ) );
     }
 
@@ -45,6 +49,8 @@ class Design_Core_Elementor_Failure_Signature_Engine {
             if ( 'rich-heading' === sanitize_key( (string) ( $source_node['semantic']['component_type'] ?? '' ) ) ) { return 'figma.mixed-text.composition'; }
         }
         if ( 'geometry' === $category ) { return 'figma.rendered-node.geometry'; }
+        if ( in_array( $category, array( 'structure', 'figma-parent-mismatch', 'figma-node-missing' ), true ) ) { return 'figma.rendered-node.parent'; }
+        if ( 'font' === $category ) { return 'figma.rendered-font.family'; }
         if ( 'typography' === $category ) { return 'figma.typography.metrics'; }
         if ( 'media' === $category ) { return 'figma.media.crop-position'; }
         if ( 'surface' === $category ) { return 'figma.surface.style'; }
@@ -62,6 +68,8 @@ class Design_Core_Elementor_Failure_Signature_Engine {
             'figma.auto-layout.fill' => 'preserve-fill-flex',
             'figma.media.fixed-height' => 'preserve-fixed-media-height',
             'figma.rendered-node.geometry' => 'verify-figma-node-geometry',
+            'figma.rendered-node.parent' => 'verify-figma-parent-structure',
+            'figma.rendered-font.family' => 'verify-font-fidelity',
         );
         return $map[ Design_Core_Elementor_Design_Memory_Store::signature_key( $signature ) ] ?? '';
     }
@@ -92,6 +100,15 @@ class Design_Core_Elementor_Failure_Signature_Engine {
     private function has_vector_asset( array $node, $type ) {
         foreach ( (array) ( $node['assets']['images'] ?? array() ) as $asset ) { if ( 'figma-vector-export' === (string) ( $asset['source'] ?? '' ) ) { return true; } }
         return in_array( $type, array( 'VECTOR', 'BOOLEAN_OPERATION', 'LINE', 'STAR', 'POLYGON' ), true );
+    }
+
+    private function has_font_evidence( array $node ) {
+        if ( ! empty( $node['style']['font_family'] ) ) { return true; }
+        foreach ( array( 'text_runs', 'text_composition' ) as $key ) {
+            $runs = 'text_composition' === $key ? (array) ( $node['figma'][ $key ]['runs'] ?? array() ) : (array) ( $node['figma'][ $key ] ?? array() );
+            foreach ( $runs as $run ) { if ( is_array( $run ) && ! empty( $run['style']['font_family'] ) ) { return true; } }
+        }
+        return false;
     }
 
     private function is_fixed_media( array $node, array $sizing, array $geo ) {
