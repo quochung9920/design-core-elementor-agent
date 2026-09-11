@@ -4,15 +4,16 @@ if ( ! defined( 'ABSPATH' ) ) { exit; }
 /**
  * Network/auth boundary for Figma.
  *
- * v2 adds bounded rendered-reference export and exact vector export so the
- * compiler can preserve vector/icon assets and compare the Elementor result
- * against Figma's own render instead of trusting inferred geometry alone.
+ * v4 exports geometry-detected vector composites as exact SVG assets, renders
+ * transformed leaf image paints as exact PNG atoms, enriches source identity
+ * with version/structural evidence and exports a bounded Figma reference.
  */
 class Design_Core_Elementor_Figma_Transport {
-    const VERSION = 2;
+    const VERSION = 4;
     const API_BASE = 'https://api.figma.com/v1';
     const MAX_RESPONSE_BYTES = 12582912;
     const MAX_VECTOR_EXPORTS = 48;
+    const MAX_RASTER_EXPORTS = 32;
 
     public function configured() { return '' !== $this->token(); }
 
@@ -36,7 +37,8 @@ class Design_Core_Elementor_Figma_Transport {
      *
      * Options:
      * - resolve_image_fills: map IMAGE fills to temporary CDN URLs.
-     * - resolve_vector_assets: export authored vector leaf nodes as SVG.
+     * - resolve_raster_assets: replace transformed leaf image paints with exact rendered PNG atoms.
+     * - resolve_vector_assets: export authored vector/icon atoms as SVG.
      * - export_reference: export the selected node as a Figma-rendered PNG.
      */
     public function read_url( $url, array $options = array() ) {
@@ -45,15 +47,36 @@ class Design_Core_Elementor_Figma_Transport {
         $payload = $this->fetch_document( $parsed['file_key'], $parsed['node_id'] );
         if ( is_wp_error( $payload ) ) { return $payload; }
 
+        $document = (array) ( $payload['document'] ?? $payload );
+        $source = $parsed;
+        $source['version'] = sanitize_text_field( (string) ( $payload['version'] ?? '' ) );
+        $source['structural_hash'] = $this->structural_hash( $document );
+
         $image_fills = ! empty( $options['resolve_image_fills'] ) ? $this->fetch_image_fills( $parsed['file_key'] ) : array();
         if ( is_wp_error( $image_fills ) ) { $image_fills = array(); }
 
-        $vector_assets = array();
+        $raster_ids = array(); $raster_assets = array();
+        if ( ! empty( $options['resolve_raster_assets'] ) && class_exists( 'Design_Core_Elementor_Figma_Raster_Asset_Resolver' ) ) {
+            $resolver = new Design_Core_Elementor_Figma_Raster_Asset_Resolver();
+            $raster_ids = $resolver->collect( $document, self::MAX_RASTER_EXPORTS );
+            if ( $raster_ids ) {
+                $raster_assets = $this->export_nodes( $parsed['file_key'], $raster_ids, 'png', 2 );
+                if ( is_wp_error( $raster_assets ) ) { $raster_assets = array(); }
+            }
+            if ( $raster_assets && isset( $payload['document'] ) && is_array( $payload['document'] ) ) {
+                $payload['document'] = $this->replace_transformed_image_fills( $payload['document'], $raster_assets, $image_fills, $resolver );
+            }
+        }
+
+        $vector_assets = array(); $vector_ids = array();
         if ( ! empty( $options['resolve_vector_assets'] ) ) {
-            $vector_ids = $this->collect_vector_ids( (array) ( $payload['document'] ?? $payload ) );
+            $vector_ids = $this->collect_vector_ids( (array) ( $payload['document'] ?? $document ) );
             if ( $vector_ids ) {
                 $vector_assets = $this->export_nodes( $parsed['file_key'], $vector_ids, 'svg', 1 );
                 if ( is_wp_error( $vector_assets ) ) { $vector_assets = array(); }
+            }
+            if ( $vector_assets && isset( $payload['document'] ) && is_array( $payload['document'] ) ) {
+                $payload['document'] = $this->collapse_exported_vector_nodes( $payload['document'], array_keys( $vector_assets ) );
             }
         }
 
@@ -79,11 +102,20 @@ class Design_Core_Elementor_Figma_Transport {
 
         return array(
             'transport_version' => self::VERSION,
-            'source' => $parsed,
+            'source' => $source,
             'figma' => $payload,
             'image_fills' => $image_fills,
+            'rendered_image_assets' => $raster_assets,
             'vector_assets' => $vector_assets,
             'reference_image' => $reference,
+            'asset_diagnostics' => array(
+                'raster_candidates' => count( $raster_ids ),
+                'raster_exports' => count( $raster_assets ),
+                'transformed_raster_resolution' => class_exists( 'Design_Core_Elementor_Figma_Raster_Asset_Resolver' ) ? 'enabled' : 'unavailable',
+                'vector_candidates' => count( $vector_ids ),
+                'vector_exports' => count( $vector_assets ),
+                'composite_vector_resolution' => class_exists( 'Design_Core_Elementor_Figma_Vector_Asset_Resolver' ) ? 'enabled' : 'legacy-leaf-only',
+            ),
         );
     }
 
@@ -108,7 +140,6 @@ class Design_Core_Elementor_Figma_Transport {
         return $response;
     }
 
-    /** Resolve Figma imageRef values to temporary Figma CDN URLs without downloading. */
     public function fetch_image_fills( $file_key ) {
         $file_key = $this->file_key( $file_key ); if ( is_wp_error( $file_key ) ) { return $file_key; }
         $response = $this->request( '/files/' . rawurlencode( $file_key ) . '/images' );
@@ -121,7 +152,6 @@ class Design_Core_Elementor_Figma_Transport {
         return $safe;
     }
 
-    /** Export selected nodes as rendered images; useful for reference evidence and vectors. */
     public function export_nodes( $file_key, array $node_ids, $format = 'png', $scale = 1 ) {
         $file_key = $this->file_key( $file_key ); if ( is_wp_error( $file_key ) ) { return $file_key; }
         $node_ids = array_values( array_unique( array_filter( array_map( 'sanitize_text_field', $node_ids ) ) ) );
@@ -138,18 +168,71 @@ class Design_Core_Elementor_Figma_Transport {
     }
 
     private function collect_vector_ids( array $root ) {
+        if ( class_exists( 'Design_Core_Elementor_Figma_Vector_Asset_Resolver' ) ) { return ( new Design_Core_Elementor_Figma_Vector_Asset_Resolver() )->collect( $root, self::MAX_VECTOR_EXPORTS ); }
         $ids = array(); $queue = array( $root );
         while ( $queue && count( $ids ) < self::MAX_VECTOR_EXPORTS ) {
             $node = array_shift( $queue );
             if ( ! is_array( $node ) || false === ( $node['visible'] ?? true ) ) { continue; }
             $type = strtoupper( (string) ( $node['type'] ?? '' ) );
             $children = array_values( array_filter( (array) ( $node['children'] ?? array() ), 'is_array' ) );
-            if ( in_array( $type, array( 'VECTOR', 'BOOLEAN_OPERATION', 'LINE', 'STAR', 'POLYGON' ), true ) && ! $children && ! empty( $node['id'] ) ) {
-                $ids[] = sanitize_text_field( (string) $node['id'] );
-            }
+            if ( in_array( $type, array( 'VECTOR', 'BOOLEAN_OPERATION', 'LINE', 'STAR', 'POLYGON' ), true ) && ! $children && ! empty( $node['id'] ) ) { $ids[] = sanitize_text_field( (string) $node['id'] ); }
             foreach ( $children as $child ) { $queue[] = $child; }
         }
         return array_values( array_unique( $ids ) );
+    }
+
+    private function replace_transformed_image_fills( array $root, array $assets, array &$image_fills, Design_Core_Elementor_Figma_Raster_Asset_Resolver $resolver ) {
+        $walk = function ( array $node ) use ( &$walk, $assets, &$image_fills, $resolver ) {
+            $id = (string) ( $node['id'] ?? '' );
+            if ( $id && ! empty( $assets[ $id ] ) ) {
+                $ref = $resolver->synthetic_ref( $id );
+                $image_fills[ $ref ] = esc_url_raw( (string) $assets[ $id ] );
+                $node['_design_core_original_image_fills'] = Design_Core_Elementor_Change_Ledger::transport_safe( (array) ( $node['fills'] ?? array() ) );
+                $node['_design_core_exact_rendered_image'] = true;
+                $node['fills'] = array( array( 'type' => 'IMAGE', 'visible' => true, 'opacity' => 1, 'blendMode' => 'NORMAL', 'scaleMode' => 'FILL', 'imageRef' => $ref ) );
+                return $node;
+            }
+            if ( isset( $node['children'] ) && is_array( $node['children'] ) ) {
+                foreach ( $node['children'] as $index => $child ) { if ( is_array( $child ) ) { $node['children'][ $index ] = $walk( $child ); } }
+            }
+            return $node;
+        };
+        return $walk( $root );
+    }
+
+    private function collapse_exported_vector_nodes( array $root, array $exported_ids ) {
+        $lookup = array_fill_keys( array_map( 'strval', $exported_ids ), true );
+        $walk = function ( array $node ) use ( &$walk, $lookup ) {
+            $id = (string) ( $node['id'] ?? '' );
+            if ( $id && isset( $lookup[ $id ] ) ) {
+                $node['_design_core_original_type'] = (string) ( $node['type'] ?? '' );
+                $node['_design_core_exact_vector_asset'] = true;
+                $node['type'] = 'VECTOR';
+                $node['children'] = array();
+                return $node;
+            }
+            if ( isset( $node['children'] ) && is_array( $node['children'] ) ) {
+                foreach ( $node['children'] as $index => $child ) { if ( is_array( $child ) ) { $node['children'][ $index ] = $walk( $child ); } }
+            }
+            return $node;
+        };
+        return $walk( $root );
+    }
+
+    private function structural_hash( array $root ) {
+        $walk = function ( array $node ) use ( &$walk ) {
+            $box = (array) ( $node['absoluteBoundingBox'] ?? array() );
+            $shape = array(
+                'id' => (string) ( $node['id'] ?? '' ), 'type' => strtoupper( (string) ( $node['type'] ?? '' ) ),
+                'layoutMode' => strtoupper( (string) ( $node['layoutMode'] ?? '' ) ), 'layoutSizingHorizontal' => strtoupper( (string) ( $node['layoutSizingHorizontal'] ?? '' ) ),
+                'layoutSizingVertical' => strtoupper( (string) ( $node['layoutSizingVertical'] ?? '' ) ),
+                'width' => isset( $box['width'] ) ? round( (float) $box['width'], 2 ) : null, 'height' => isset( $box['height'] ) ? round( (float) $box['height'], 2 ) : null,
+                'children' => array(),
+            );
+            foreach ( (array) ( $node['children'] ?? array() ) as $child ) { if ( is_array( $child ) && false !== ( $child['visible'] ?? true ) ) { $shape['children'][] = $walk( $child ); } }
+            return $shape;
+        };
+        return substr( hash( 'sha256', wp_json_encode( $walk( $root ) ) ), 0, 32 );
     }
 
     private function request( $path ) {

@@ -1,9 +1,9 @@
 <?php
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-/** Finds verified lessons relevant to the current source before compilation. */
+/** Finds verified, compatible lessons relevant to the current source before compilation. */
 class Design_Core_Elementor_Design_Memory_Retriever {
-    const VERSION = 1;
+    const VERSION = 2;
     const MIN_CONFIDENCE = 0.72;
 
     private $store;
@@ -19,10 +19,11 @@ class Design_Core_Elementor_Design_Memory_Retriever {
         $signals = $this->signatures->signals_from_ir( $ir );
         $project_key = sanitize_key( (string) ( $context['project_scope_key'] ?? Design_Core_Elementor_Design_Memory_Store::project_scope_key() ) );
         $source_fingerprint = sanitize_key( (string) ( $context['source_fingerprint'] ?? '' ) );
-        $matches = array();
+        $matches = array(); $skipped_incompatible = 0;
 
         foreach ( $this->store->lessons() as $lesson ) {
             if ( empty( $lesson['verified'] ) || (float) ( $lesson['confidence'] ?? 0 ) < self::MIN_CONFIDENCE ) { continue; }
+            if ( ! $this->lesson_is_compatible( $lesson ) ) { $skipped_incompatible++; continue; }
             if ( ! $this->scope_matches( $lesson, $project_key, $source_fingerprint ) ) { continue; }
             $signature = Design_Core_Elementor_Design_Memory_Store::signature_key( $lesson['signature'] ?? '' );
             $signal_score = $this->signal_score( $signature, $signals );
@@ -42,6 +43,7 @@ class Design_Core_Elementor_Design_Memory_Retriever {
             'project_scope_key' => $project_key,
             'source_fingerprint' => $source_fingerprint,
             'lessons' => $matches,
+            'skipped_incompatible' => $skipped_incompatible,
             'strategies' => array_values( array_unique( array_filter( array_map( static fn( $lesson ) => sanitize_key( (string) ( $lesson['strategy'] ?? '' ) ), $matches ) ) ) ),
         );
     }
@@ -51,7 +53,19 @@ class Design_Core_Elementor_Design_Memory_Retriever {
         $ir = ( new Design_Core_Elementor_Fidelity_Rule_Registry() )->apply_to_ir( $ir, $retrieval );
         $ir['diagnostics']['design_memory']['retrieval_version'] = self::VERSION;
         $ir['diagnostics']['design_memory']['source_fingerprint'] = (string) ( $retrieval['source_fingerprint'] ?? '' );
+        $ir['diagnostics']['design_memory']['skipped_incompatible'] = (int) ( $retrieval['skipped_incompatible'] ?? 0 );
         return array( 'design_ir' => $ir, 'memory' => $retrieval );
+    }
+
+    private function lesson_is_compatible( array $lesson ) {
+        $current = defined( 'DESIGN_CORE_ELEMENTOR_VERSION' ) ? (string) DESIGN_CORE_ELEMENTOR_VERSION : '0.0.0';
+        $min = trim( (string) ( $lesson['min_core_version'] ?? '' ) );
+        $max = trim( (string) ( $lesson['max_core_version'] ?? '' ) );
+        if ( $min && version_compare( $current, $min, '<' ) ) { return false; }
+        if ( $max && version_compare( $current, $max, '>' ) ) { return false; }
+        $registry = (int) ( $lesson['rule_registry_version'] ?? 0 );
+        if ( $registry > 0 && class_exists( 'Design_Core_Elementor_Fidelity_Rule_Registry' ) && $registry > Design_Core_Elementor_Fidelity_Rule_Registry::VERSION ) { return false; }
+        return true;
     }
 
     private function scope_matches( array $lesson, $project_key, $source_fingerprint ) {

@@ -54,7 +54,7 @@ stage "php -l (all files)"
 if find . -name '*.php' -not -path './vendor/*' -not -path './node_modules/*' -print0 | xargs -0 -n1 "$PHP_BIN" -l >"$ARTIFACTS/syntax.txt" 2>&1; then ok; else bad "see $ARTIFACTS/syntax.txt" "syntax"; fi
 
 say ""; say "Contracts"
-CONTRACTS="architecture registry native-fidelity strict-native responsive-compiler design-intelligence design-brain rc19-intelligence rc20-fidelity reference-integration fixed-width-governance figma-fidelity pawcare-benchmark design-memory"
+CONTRACTS="architecture registry native-fidelity strict-native responsive-compiler design-intelligence design-brain rc19-intelligence rc20-fidelity reference-integration fixed-width-governance figma-fidelity figma-vector-assets figma-raster-assets figma-strict-verifiers pawcare-benchmark design-memory"
 for T in $CONTRACTS; do
   stage "$T"
   if [[ "$T" == "figma-fidelity" ]]; then
@@ -77,7 +77,7 @@ if npm run check >"$ARTIFACTS/npm-check.txt" 2>&1; then ok; else bad "see $ARTIF
 say ""; say "Browser"
 stage "viewports 1440/1024/768/390"
 if node scripts/browser-analyze-target.mjs "$ROOT/tests/fixtures/benchmark-hero-split.html" 1440,1024,768,390 >"$ARTIFACTS/viewports.json" 2>"$ARTIFACTS/viewports.err"; then
-  if node -e "const x=require('$ARTIFACTS/viewports.json'); for (const w of ['1440','1024','768','390']) { if (!x.viewports || !x.viewports[w] || !x.viewports[w].length) process.exit(1); }" 2>>"$ARTIFACTS/viewports.err"; then ok; else bad "incomplete evidence" "viewports"; fi
+  if node -e "const x=require('$ARTIFACTS/viewports.json'); for (const w of ['1440','1024','768','390']) { if (!x.viewports || !x.viewports[w] || !x.viewports[w].length) process.exit(1); } if (x.schema_version < 6) process.exit(1);" 2>>"$ARTIFACTS/viewports.err"; then ok; else bad "incomplete evidence" "viewports"; fi
 else bad "browser crashed, see $ARTIFACTS/viewports.err" "viewports"; fi
 
 stage "responsive 390/768"
@@ -89,10 +89,10 @@ done
 if [[ $RESP_OK == 1 ]]; then ok; else bad "overflow or capture failure" "responsive"; fi
 
 say ""; say "Visual"
-stage "screenshot engine"
-if node scripts/capture-page.mjs "$ROOT/tests/fixtures/marketing.html" 390 "$ARTIFACTS/ref.png" >"$ARTIFACTS/shot-ref.json" 2>&1 && node scripts/capture-page.mjs "$ROOT/tests/fixtures/marketing.html" 390 "$ARTIFACTS/cand.png" >"$ARTIFACTS/shot-cand.json" 2>&1 && node scripts/visual-compare.mjs "$ARTIFACTS/ref.png" "$ARTIFACTS/cand.png" >"$ARTIFACTS/visual.json" 2>&1 && node -e "const x=require('$ARTIFACTS/visual.json'); if(!x.comparable || x.similarity < 0.999) process.exit(1);"; then
+stage "visual diff v4"
+if node scripts/capture-page.mjs "$ROOT/tests/fixtures/marketing.html" 390 "$ARTIFACTS/ref.png" >"$ARTIFACTS/shot-ref.json" 2>&1 && node scripts/capture-page.mjs "$ROOT/tests/fixtures/marketing.html" 390 "$ARTIFACTS/cand.png" >"$ARTIFACTS/shot-cand.json" 2>&1 && node scripts/visual-compare.mjs "$ARTIFACTS/ref.png" "$ARTIFACTS/cand.png" >"$ARTIFACTS/visual.json" 2>&1 && node -e "const x=require('$ARTIFACTS/visual.json'); if(!x.comparable || x.version !== 4 || x.similarity < 0.999 || x.perceptual_similarity < 0.999 || !Array.isArray(x.worst_regions)) process.exit(1);"; then
   SIM=$(node -p "require('$ARTIFACTS/visual.json').similarity"); printf 'PASS (similarity %s)\n' "$SIM"; PASS=$((PASS+1))
-else bad "see $ARTIFACTS/visual.json" "screenshot-engine"; fi
+else bad "see $ARTIFACTS/visual.json" "visual-diff-v4"; fi
 
 stage "PawCare benchmark"
 if "$PHP_BIN" tests/pawcare-benchmark/run.php >"$ARTIFACTS/pawcare.txt" 2>&1; then PAW_SCORE=$(grep -o '[0-9]* assertions, 0 failures' "$ARTIFACTS/pawcare.txt" | head -n1 || true); printf 'PASS (%s)\n' "$PAW_SCORE"; PASS=$((PASS+1)); else bad "see $ARTIFACTS/pawcare.txt" "pawcare"; fi

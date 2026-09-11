@@ -52,14 +52,35 @@ wp design-core figma_build '<FIGMA_URL>' --verify=1
 wp design-core figma_verify '<FIGMA_URL>' '<CANDIDATE_URL>' --page-id=<ID>
 ```
 
-The strict path always requests image fills, vector assets and a Figma-rendered
-reference. If source evidence cannot be obtained, fail closed; do not silently
-replace icons, omit assets or guess a different design.
+The strict path always requests image fills, transformed raster atoms, vector
+assets and a Figma-rendered reference. If source evidence cannot be obtained,
+fail closed; do not silently replace icons, omit assets, guess crop transforms
+or invent a different design.
 
 A persisted Elementor tree is NOT completion. For a Figma task, completion
 requires rendered verification against the Figma reference. If verification
 reports `needs-correction`, inspect its exact Figma-node/Elementor-owner evidence,
 correct the generic compiler/runtime issue, render again and repeat.
+
+RC25 strict verification rules:
+
+- Composite vector/icon nodes must be exported as exact SVG visual atoms when
+  the resolver identifies them. Never lower a missing arrow/check/clock/dot into
+  a generic container simply because export failed.
+- Simple transformed leaf IMAGE paints (`STRETCH`/`imageTransform`, filters or
+  image rotation) must use Figma's authoritative rendered atom when CSS cannot
+  represent the source transform exactly. Failed required raster export is a
+  blocker, not permission to guess `object-position`.
+- Exact `dc-figma-node-*` identity outranks DOM path/text/index heuristics.
+- Geometry PASS is insufficient when a node belongs to the wrong Figma parent;
+  parent-ownership failure requires composition/BuildPlan repair.
+- Expected Figma fonts must be browser-proven. A fallback font is a failure, not
+  an acceptable visual approximation.
+- A single desktop Figma frame cannot prove mobile pixel fidelity. When no
+  tablet/mobile Figma references exist, report responsive evidence as
+  `inferred-runtime` and only claim runtime safety, never mobile reference parity.
+- Visual similarity uses pixel + perceptual + dimension evidence, while exact
+  Figma geometry/structure remain independent hard gates.
 
 ## Design Memory contract
 
@@ -89,17 +110,22 @@ Learning rules:
 - Never weaken or delete a lesson/test just to make a later design pass. If a
   rule becomes obsolete because Figma/Elementor changed, supersede/version it
   with evidence.
+- Source-scoped memory must be revision-aware. A changed Figma selected-node
+  structural hash must produce a new source fingerprint instead of silently
+  reusing stale lessons.
+- Lesson compatibility bounds and Fidelity Rule Registry versions must be
+  honored before a remembered strategy is applied.
 
 The desired loop is:
 
 ```
 source
-  -> retrieve verified lessons
+  -> retrieve compatible verified lessons
   -> compile
   -> render
-  -> compare
+  -> compare image + geometry + structure + fonts + responsive runtime
   -> fail: incident + correction
   -> render again
-  -> pass: reinforce verified lesson
+  -> quality gate pass: reinforce verified lesson
   -> repeated lesson: benchmark candidate
 ```
