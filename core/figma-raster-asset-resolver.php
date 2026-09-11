@@ -7,7 +7,7 @@ if ( ! defined( 'ABSPATH' ) ) { exit; }
  * browser receives Figma's exact crop instead of guessing CSS object-position.
  */
 class Design_Core_Elementor_Figma_Raster_Asset_Resolver {
-    const VERSION = 1;
+    const VERSION = 2;
     const MAX_AREA = 16777216; // 16 MP guard for a single authored atom.
 
     public function collect( array $root, $limit = 32 ) {
@@ -30,17 +30,26 @@ class Design_Core_Elementor_Figma_Raster_Asset_Resolver {
         $box = (array) ( $node['absoluteBoundingBox'] ?? array() );
         $width = (float) ( $box['width'] ?? 0 ); $height = (float) ( $box['height'] ?? 0 );
         if ( $width <= 0 || $height <= 0 || ( $width * $height ) > self::MAX_AREA ) { return false; }
-        foreach ( (array) ( $node['fills'] ?? array() ) as $fill ) {
-            if ( ! is_array( $fill ) || false === ( $fill['visible'] ?? true ) || 'IMAGE' !== strtoupper( (string) ( $fill['type'] ?? '' ) ) ) { continue; }
-            $scale = strtoupper( (string) ( $fill['scaleMode'] ?? 'FILL' ) );
-            $has_transform = is_array( $fill['imageTransform'] ?? null ) && ! $this->identity_transform( $fill['imageTransform'] );
-            $has_filters = $this->nonzero_filters( (array) ( $fill['filters'] ?? array() ) );
-            $rotation = abs( (float) ( $fill['rotation'] ?? 0 ) ) > 0.01;
-            // REST exposes imageTransform for STRETCH. Preserve any transformed,
-            // filtered or rotated image atom through Figma's own renderer.
-            return 'STRETCH' === $scale || $has_transform || $has_filters || $rotation;
-        }
-        return false;
+
+        // Keep this path deterministic: export only simple leaf image atoms.
+        // Multi-paint/stroked/effected nodes stay structural and are caught by
+        // rendered verification rather than risking doubled paint/effects.
+        $visible_fills = array_values( array_filter( (array) ( $node['fills'] ?? array() ), static fn( $fill ) => is_array( $fill ) && false !== ( $fill['visible'] ?? true ) && (float) ( $fill['opacity'] ?? 1 ) > 0 ) );
+        $visible_strokes = array_values( array_filter( (array) ( $node['strokes'] ?? array() ), static fn( $stroke ) => is_array( $stroke ) && false !== ( $stroke['visible'] ?? true ) && (float) ( $stroke['opacity'] ?? 1 ) > 0 ) );
+        $visible_effects = array_values( array_filter( (array) ( $node['effects'] ?? array() ), static fn( $effect ) => is_array( $effect ) && false !== ( $effect['visible'] ?? true ) ) );
+        if ( 1 !== count( $visible_fills ) || $visible_strokes || $visible_effects ) { return false; }
+
+        $fill = $visible_fills[0];
+        if ( 'IMAGE' !== strtoupper( (string) ( $fill['type'] ?? '' ) ) ) { return false; }
+        $scale = strtoupper( (string) ( $fill['scaleMode'] ?? 'FILL' ) );
+        $has_transform = is_array( $fill['imageTransform'] ?? null ) && ! $this->identity_transform( $fill['imageTransform'] );
+        $has_filters = $this->nonzero_filters( (array) ( $fill['filters'] ?? array() ) );
+        $rotation = abs( (float) ( $fill['rotation'] ?? 0 ) ) > 0.01;
+
+        // Figma REST exposes imageTransform only for STRETCH. CSS background
+        // position cannot represent a general affine matrix exactly, so use the
+        // authoritative Figma render for transformed/filtered/rotated atoms.
+        return 'STRETCH' === $scale || $has_transform || $has_filters || $rotation;
     }
 
     public function synthetic_ref( $node_id ) {
