@@ -50,7 +50,7 @@ try {
         'display','position','flexDirection','flexWrap','justifyContent','alignItems','gap','rowGap','columnGap',
         'gridTemplateColumns','gridTemplateRows','width','height','minWidth','maxWidth','minHeight','maxHeight',
         'marginTop','marginRight','marginBottom','marginLeft','paddingTop','paddingRight','paddingBottom','paddingLeft',
-        'fontFamily','fontSize','fontWeight','lineHeight','letterSpacing','color','backgroundColor','backgroundImage',
+        'fontFamily','fontStyle','fontSize','fontWeight','lineHeight','letterSpacing','color','backgroundColor','backgroundImage',
         'backgroundSize','backgroundPosition','borderTopWidth','borderTopStyle','borderTopColor','borderRadius','boxShadow',
         'opacity','overflow','objectFit','objectPosition','aspectRatio','zIndex','textAlign','textTransform','transform'
       ];
@@ -63,22 +63,46 @@ try {
         return `/body/${parts.join('/')}`;
       };
       const normalizedText = value => (value || '').replace(/\s+/g, ' ').trim().slice(0, 240);
+      const figmaClassOf = (element) => element ? ([...element.classList].find(c => c.startsWith('dc-figma-node-')) || '') : '';
+      const primaryFontOf = value => {
+        const first = String(value || '').split(',')[0]?.trim() || '';
+        return first.replace(/^['"]|['"]$/g, '');
+      };
+      const fontLoaded = (cs, primary) => {
+        if (!primary || !document.fonts?.check) return null;
+        try {
+          const family = primary.replace(/"/g, '\\"');
+          return document.fonts.check(`${cs.fontStyle || 'normal'} ${cs.fontWeight || '400'} ${cs.fontSize || '16px'} "${family}"`);
+        } catch { return null; }
+      };
+
       const elements = document.querySelectorAll('body *');
       if (elements.length > maxElements) throw new Error(`element-limit-exceeded:${elements.length}:${maxElements}`);
       return [...elements].map((el, index) => {
         const cs = getComputedStyle(el); const r = el.getBoundingClientRect(); const styles = {};
         for (const p of props) styles[p] = cs[p];
+
         const owner = el.matches?.('[data-id],[data-elementor-id]') ? el : el.closest?.('[data-id],[data-elementor-id]');
         const elementorId = owner?.getAttribute('data-id') || owner?.getAttribute('data-elementor-id') || '';
         const elementorType = owner?.getAttribute('data-element_type') || '';
         const widgetRaw = owner?.getAttribute('data-widget_type') || '';
         const widgetType = widgetRaw ? widgetRaw.split('.')[0] : '';
+        const parentElementorOwner = owner?.parentElement?.closest?.('[data-id],[data-elementor-id]');
+        const parentElementorId = parentElementorOwner?.getAttribute('data-id') || parentElementorOwner?.getAttribute('data-elementor-id') || '';
+
         const figmaOwner = el.matches?.('[class*="dc-figma-node-"]') ? el : el.closest?.('[class*="dc-figma-node-"]');
-        const figmaClass = figmaOwner ? [...figmaOwner.classList].find(c => c.startsWith('dc-figma-node-')) || '' : '';
+        const figmaClass = figmaClassOf(figmaOwner);
+        const figmaParent = figmaOwner?.parentElement?.closest?.('[class*="dc-figma-node-"]');
+        const figmaParentClass = figmaClassOf(figmaParent);
+
+        const primaryFont = primaryFontOf(cs.fontFamily);
         return {
           index, domPath: domPath(el), tag: el.tagName.toLowerCase(), id: el.id || '', classes: [...el.classList],
           text: normalizedText(el.textContent), ownText: normalizedText([...el.childNodes].filter(n => n.nodeType === Node.TEXT_NODE).map(n => n.textContent).join(' ')),
-          elementorId, elementorType, widgetType, figmaClass,
+          elementorId, elementorType, widgetType, parentElementorId,
+          figmaClass, figmaParentClass,
+          fontFamilyPrimary: primaryFont,
+          fontLoaded: fontLoaded(cs, primaryFont),
           rect: { x:r.x, y:r.y, width:r.width, height:r.height },
           naturalWidth: el instanceof HTMLImageElement ? el.naturalWidth : 0,
           naturalHeight: el instanceof HTMLImageElement ? el.naturalHeight : 0,
@@ -87,7 +111,7 @@ try {
       });
     }, MAX_ELEMENTS);
   }
-  console.log(JSON.stringify({ schema_version: 5, target: targetUrl.href, javascript_enabled: isRemote, network_policy: isRemote ? 'same-origin-plus-explicit-static-hosts' : 'blocked', target_origin: targetOrigin, allowed_hosts: [...allowedHosts], viewports: results }));
+  console.log(JSON.stringify({ schema_version: 6, target: targetUrl.href, javascript_enabled: isRemote, network_policy: isRemote ? 'same-origin-plus-explicit-static-hosts' : 'blocked', target_origin: targetOrigin, allowed_hosts: [...allowedHosts], viewports: results }));
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 4;
