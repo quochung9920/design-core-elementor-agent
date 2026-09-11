@@ -4,6 +4,7 @@ require dirname( __DIR__ ) . '/bootstrap-standalone.php';
 dc_require( array(
     'core/figma-structure-verifier.php',
     'core/figma-font-verifier.php',
+    'core/figma-responsive-verifier.php',
 ) );
 
 $ir = array(
@@ -71,5 +72,23 @@ $font_bad['viewports']['1440'][2]['styles']['fontFamily'] = 'Georgia, serif';
 $font_fail = $font->report( $ir, $font_bad, 1440 );
 dc_assert( 'fail' === ( $font_fail['status'] ?? '' ) && 1 === (int) ( $font_fail['issue_count'] ?? 0 ), 'strict-verifiers: fallback font cannot masquerade as source typography' );
 dc_assert( 'Newsreader' === ( $font_fail['issues'][0]['expected_family'] ?? '' ), 'strict-verifiers: font issue identifies the missing authored family' );
+
+$responsive_analysis = $analysis;
+foreach ( array( 1024, 768, 390 ) as $viewport ) {
+    $responsive_analysis['viewports'][ (string) $viewport ] = array(
+        array(
+            'tag' => 'section', 'classes' => array( 'elementor-element', 'dc-figma-node-4-1049' ), 'figmaClass' => 'dc-figma-node-4-1049', 'figmaParentClass' => '',
+            'rect' => array( 'x' => 0, 'y' => 0, 'width' => $viewport, 'height' => 900 ), 'styles' => array(), 'elementorId' => 'root1234', 'parentElementorId' => '',
+        ),
+    );
+}
+$responsive = new Design_Core_Elementor_Figma_Responsive_Verifier();
+$responsive_pass = $responsive->report( $ir, $responsive_analysis, array( 1024, 768, 390 ) );
+dc_assert( 'pass' === ( $responsive_pass['status'] ?? '' ) && 'inferred-runtime' === ( $responsive_pass['mode'] ?? '' ), 'strict-verifiers: responsive runtime safety is explicitly verified as inferred, not mobile pixel fidelity' );
+
+$responsive_bad = $responsive_analysis;
+$responsive_bad['viewports']['390'][0]['rect']['width'] = 1200;
+$responsive_fail = $responsive->report( $ir, $responsive_bad, array( 390 ) );
+dc_assert( 'fail' === ( $responsive_fail['status'] ?? '' ) && ! empty( $responsive_fail['issues'] ), 'strict-verifiers: fixed desktop-width root fails mobile runtime verification' );
 
 dc_finish( 'Figma strict rendered verifiers' );
