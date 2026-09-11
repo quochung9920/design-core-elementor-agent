@@ -8,8 +8,8 @@ if ( ! defined( 'ABSPATH' ) ) { exit; }
  */
 class Design_Core_Elementor_Design_Memory_Store {
     const OPTION_KEY = 'design_core_elementor_design_memory_v1';
-    const SCHEMA_VERSION = 1;
-    const SEED_VERSION = 2;
+    const SCHEMA_VERSION = 2;
+    const SEED_VERSION = 3;
     const MAX_LESSONS = 400;
     const MAX_INCIDENTS = 600;
     const MAX_BENCHMARK_CANDIDATES = 250;
@@ -109,7 +109,24 @@ class Design_Core_Elementor_Design_Memory_Store {
 
     public static function signature_key( $value ) { return trim( preg_replace( '/[^a-z0-9._-]+/', '', strtolower( (string) $value ) ), '.' ); }
     public static function project_scope_key() { $url = function_exists( 'home_url' ) ? (string) home_url( '/' ) : ''; return $url ? substr( hash( 'sha256', strtolower( rtrim( $url, '/' ) ) ), 0, 24 ) : ''; }
-    public static function source_fingerprint( array $source ) { $file = sanitize_text_field( (string) ( $source['file_key'] ?? '' ) ); $node = sanitize_text_field( (string) ( $source['node_id'] ?? '' ) ); $kind = sanitize_key( (string) ( $source['kind'] ?? 'figma' ) ); return ( $file || $node ) ? substr( hash( 'sha256', $kind . '|' . $file . '|' . $node ), 0, 24 ) : ''; }
+
+    /**
+     * Source-scoped memory is tied to a selected-node revision. Prefer the
+     * selected-node structural hash; fall back to the Figma file version when
+     * older transports cannot provide one. Legacy callers keep the v1 key.
+     */
+    public static function source_fingerprint( array $source ) {
+        $file = sanitize_text_field( (string) ( $source['file_key'] ?? '' ) );
+        $node = sanitize_text_field( (string) ( $source['node_id'] ?? '' ) );
+        $kind = sanitize_key( (string) ( $source['kind'] ?? 'figma' ) );
+        if ( ! $file && ! $node ) { return ''; }
+        $structural = preg_replace( '/[^a-f0-9]/', '', strtolower( (string) ( $source['structural_hash'] ?? '' ) ) );
+        $version = sanitize_text_field( (string) ( $source['version'] ?? '' ) );
+        $revision = $structural ?: $version;
+        $basis = $kind . '|' . $file . '|' . $node;
+        if ( $revision ) { $basis = 'v2|' . $basis . '|' . $revision; }
+        return substr( hash( 'sha256', $basis ), 0, 24 );
+    }
 
     private function sanitize_lesson( array $lesson ) {
         $signature = self::signature_key( $lesson['signature'] ?? '' ); $strategy = sanitize_key( (string) ( $lesson['strategy'] ?? '' ) );
@@ -118,12 +135,32 @@ class Design_Core_Elementor_Design_Memory_Store {
         if ( empty( $lesson['verified'] ) ) { return new WP_Error( 'design_core_memory_unverified_lesson', 'Design Memory accepts only verified lessons.' ); }
         $scope = $this->scope( $lesson['scope'] ?? 'global' ); $scope_key = $this->scope_key( $lesson['scope_key'] ?? '' ); if ( 'global' !== $scope && ! $scope_key ) { return new WP_Error( 'design_core_memory_scope_key_required', 'Project/source lessons require a scope key.' ); }
         $id = 'lesson-' . substr( hash( 'sha256', $scope . '|' . $scope_key . '|' . $signature . '|' . $strategy ), 0, 20 );
-        return array( 'id' => $id, 'signature' => $signature, 'strategy' => $strategy, 'scope' => $scope, 'scope_key' => $scope_key, 'verified' => true, 'confidence' => max( 0.5, min( 1, (float) ( $lesson['confidence'] ?? 0.8 ) ) ), 'verified_hits' => max( 1, (int) ( $lesson['verified_hits'] ?? 1 ) ), 'origin' => sanitize_key( (string) ( $lesson['origin'] ?? 'runtime' ) ), 'source_kind' => sanitize_key( (string) ( $lesson['source_kind'] ?? '' ) ), 'source_fingerprint' => $this->fingerprint( $lesson['source_fingerprint'] ?? '' ), 'reason' => sanitize_text_field( (string) ( $lesson['reason'] ?? '' ) ), 'evidence' => $this->safe_evidence( (array) ( $lesson['evidence'] ?? array() ) ), 'first_verified_at' => sanitize_text_field( (string) ( $lesson['first_verified_at'] ?? gmdate( 'c' ) ) ), 'last_verified_at' => gmdate( 'c' ), 'min_core_version' => sanitize_text_field( (string) ( $lesson['min_core_version'] ?? '' ) ) );
+        return array(
+            'id' => $id, 'signature' => $signature, 'strategy' => $strategy, 'scope' => $scope, 'scope_key' => $scope_key,
+            'verified' => true, 'confidence' => max( 0.5, min( 1, (float) ( $lesson['confidence'] ?? 0.8 ) ) ), 'verified_hits' => max( 1, (int) ( $lesson['verified_hits'] ?? 1 ) ),
+            'origin' => sanitize_key( (string) ( $lesson['origin'] ?? 'runtime' ) ), 'source_kind' => sanitize_key( (string) ( $lesson['source_kind'] ?? '' ) ),
+            'source_fingerprint' => $this->fingerprint( $lesson['source_fingerprint'] ?? '' ), 'reason' => sanitize_text_field( (string) ( $lesson['reason'] ?? '' ) ),
+            'evidence' => $this->safe_evidence( (array) ( $lesson['evidence'] ?? array() ) ),
+            'first_verified_at' => sanitize_text_field( (string) ( $lesson['first_verified_at'] ?? gmdate( 'c' ) ) ), 'last_verified_at' => gmdate( 'c' ),
+            'min_core_version' => sanitize_text_field( (string) ( $lesson['min_core_version'] ?? '' ) ),
+            'max_core_version' => sanitize_text_field( (string) ( $lesson['max_core_version'] ?? '' ) ),
+            'rule_registry_version' => max( 0, (int) ( $lesson['rule_registry_version'] ?? ( class_exists( 'Design_Core_Elementor_Fidelity_Rule_Registry' ) ? Design_Core_Elementor_Fidelity_Rule_Registry::VERSION : 0 ) ) ),
+        );
     }
 
     private function upsert_lesson_into_state( array $state, array $lesson ) {
         if ( ! isset( $lesson['id'] ) ) { $lesson = $this->sanitize_lesson( $lesson ); if ( is_wp_error( $lesson ) ) { return $state; } }
-        foreach ( $state['lessons'] as &$existing ) { if ( (string) ( $existing['id'] ?? '' ) !== (string) $lesson['id'] ) { continue; } $existing['confidence'] = max( (float) ( $existing['confidence'] ?? 0 ), (float) ( $lesson['confidence'] ?? 0 ) ); $existing['verified_hits'] = (int) ( $existing['verified_hits'] ?? 0 ) + max( 1, (int) ( $lesson['verified_hits'] ?? 1 ) ); $existing['last_verified_at'] = gmdate( 'c' ); $existing['reason'] = $lesson['reason'] ?: (string) ( $existing['reason'] ?? '' ); $existing['evidence'] = array_merge( (array) ( $existing['evidence'] ?? array() ), (array) ( $lesson['evidence'] ?? array() ) ); return $state; }
+        foreach ( $state['lessons'] as &$existing ) {
+            if ( (string) ( $existing['id'] ?? '' ) !== (string) $lesson['id'] ) { continue; }
+            $existing['confidence'] = max( (float) ( $existing['confidence'] ?? 0 ), (float) ( $lesson['confidence'] ?? 0 ) );
+            $existing['verified_hits'] = (int) ( $existing['verified_hits'] ?? 0 ) + max( 1, (int) ( $lesson['verified_hits'] ?? 1 ) );
+            $existing['last_verified_at'] = gmdate( 'c' ); $existing['reason'] = $lesson['reason'] ?: (string) ( $existing['reason'] ?? '' );
+            $existing['evidence'] = array_merge( (array) ( $existing['evidence'] ?? array() ), (array) ( $lesson['evidence'] ?? array() ) );
+            $existing['min_core_version'] = (string) ( $lesson['min_core_version'] ?? $existing['min_core_version'] ?? '' );
+            $existing['max_core_version'] = (string) ( $lesson['max_core_version'] ?? $existing['max_core_version'] ?? '' );
+            $existing['rule_registry_version'] = (int) ( $lesson['rule_registry_version'] ?? $existing['rule_registry_version'] ?? 0 );
+            return $state;
+        }
         unset( $existing ); array_unshift( $state['lessons'], $lesson ); return $state;
     }
 
@@ -133,5 +170,15 @@ class Design_Core_Elementor_Design_Memory_Store {
     private function scope( $scope ) { $scope = sanitize_key( (string) $scope ); return in_array( $scope, array( 'global', 'project', 'source' ), true ) ? $scope : 'project'; }
     private function scope_key( $value ) { return preg_replace( '/[^a-z0-9_-]/', '', strtolower( (string) $value ) ); }
     private function fingerprint( $value ) { return substr( preg_replace( '/[^a-z0-9_-]/', '', strtolower( (string) $value ) ), 0, 64 ); }
-    private function safe_evidence( array $evidence ) { $safe = array(); $allowed = array( 'similarity_before', 'similarity_after', 'target_similarity', 'viewport', 'delta_px', 'delta_ratio', 'issue_count', 'iteration_count', 'architecture_score', 'visual_score', 'responsive_status', 'interaction_status', 'ux_status', 'rule_version', 'note' ); foreach ( $allowed as $key ) { if ( ! array_key_exists( $key, $evidence ) ) { continue; } $value = $evidence[ $key ]; if ( is_bool( $value ) || is_int( $value ) || is_float( $value ) ) { $safe[ $key ] = $value; } elseif ( is_scalar( $value ) ) { $safe[ $key ] = sanitize_text_field( (string) $value ); } } return $safe; }
+    private function safe_evidence( array $evidence ) {
+        $safe = array();
+        $allowed = array( 'similarity_before', 'similarity_after', 'target_similarity', 'viewport', 'delta_px', 'delta_ratio', 'issue_count', 'iteration_count', 'architecture_score', 'visual_score', 'perceptual_similarity', 'geometry_match_ratio', 'structure_match_ratio', 'font_match_ratio', 'responsive_status', 'interaction_status', 'ux_status', 'rule_version', 'note' );
+        foreach ( $allowed as $key ) {
+            if ( ! array_key_exists( $key, $evidence ) ) { continue; }
+            $value = $evidence[ $key ];
+            if ( is_bool( $value ) || is_int( $value ) || is_float( $value ) ) { $safe[ $key ] = $value; }
+            elseif ( is_scalar( $value ) ) { $safe[ $key ] = sanitize_text_field( (string) $value ); }
+        }
+        return $safe;
+    }
 }
