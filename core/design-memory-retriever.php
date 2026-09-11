@@ -24,7 +24,7 @@ class Design_Core_Elementor_Design_Memory_Retriever {
         foreach ( $this->store->lessons() as $lesson ) {
             if ( empty( $lesson['verified'] ) || (float) ( $lesson['confidence'] ?? 0 ) < self::MIN_CONFIDENCE ) { continue; }
             if ( ! $this->scope_matches( $lesson, $project_key, $source_fingerprint ) ) { continue; }
-            $signature = sanitize_key( (string) ( $lesson['signature'] ?? '' ) );
+            $signature = Design_Core_Elementor_Design_Memory_Store::signature_key( $lesson['signature'] ?? '' );
             $signal_score = $this->signal_score( $signature, $signals );
             if ( $signal_score <= 0 ) { continue; }
             $confidence = (float) ( $lesson['confidence'] ?? 0 );
@@ -68,6 +68,7 @@ class Design_Core_Elementor_Design_Memory_Retriever {
         $parts = explode( '.', $signature );
         if ( count( $parts ) < 2 ) { return 0.0; }
         foreach ( $signals as $signal ) {
+            $signal = Design_Core_Elementor_Design_Memory_Store::signature_key( $signal );
             if ( 0 === strpos( $signal, $parts[0] . '.' . $parts[1] . '.' ) || 0 === strpos( $signature, implode( '.', array_slice( explode( '.', $signal ), 0, 2 ) ) . '.' ) ) { return 0.55; }
         }
         return 0.0;
