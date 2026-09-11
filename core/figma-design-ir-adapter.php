@@ -62,7 +62,20 @@ class Design_Core_Elementor_Figma_Design_IR_Adapter {
         $type=strtoupper((string)($figma['type']??'FRAME'));
         if(in_array($type,array('DOCUMENT','CANVAS'),true)&&1===count((array)($figma['children']??array()))){return $this->convert_node($figma['children'][0],$parent_id,$depth+1);}
         $id=$this->node_id((string)($figma['id']??wp_generate_uuid4()));$children=array();
-        foreach((array)($figma['children']??array()) as $child){if(!is_array($child)||false===($child['visible']??true)){continue;}$child_id=$this->convert_node($child,$id,$depth+1);if($child_id){$children[]=$child_id;}}
+        $stack_overlaps='VERTICAL'===strtoupper((string)($figma['layoutMode']??''));
+        $prev_bottom=null;
+        foreach((array)($figma['children']??array()) as $child){
+            if(!is_array($child)||false===($child['visible']??true)){continue;}
+            if($stack_overlaps&&null!==$prev_bottom){
+                $box=(array)($child['absoluteBoundingBox']??array());
+                if(isset($box['y'])&&is_numeric($box['y'])&&(float)$box['y']<$prev_bottom-0.5){
+                    $child['_design_core_overlap_top']=round($prev_bottom-(float)$box['y'],1);
+                }
+            }
+            $child_id=$this->convert_node($child,$id,$depth+1);if($child_id){$children[]=$child_id;}
+            $box=(array)($child['absoluteBoundingBox']??array());
+            if(isset($box['y'],$box['height'])&&is_numeric($box['y'])&&is_numeric($box['height'])){$prev_bottom=(float)$box['y']+(float)$box['height'];}
+        }
         $semantic=$this->semantic($figma,$type);$content=$this->content($figma,$type);$layout=$this->layout($figma);$style=$this->style($figma);$spacing=$this->spacing($figma);$assets=$this->assets($figma,$type);
         $layout_governance=$this->layout_governance($figma,$layout);$tag=$this->tag($type,$semantic,$content);$schema=$this->content_schema($content,$assets,$semantic);
         $structure=strtolower($tag).'|'.implode(',',array_map(function($child_id){return(string)($this->nodes[$child_id]['source']['tag']??'node');},$children));
@@ -104,6 +117,12 @@ class Design_Core_Elementor_Figma_Design_IR_Adapter {
         $radius=is_numeric($figma['cornerRadius']??null)&&(float)$figma['cornerRadius']>0;
         if(!($hint||$bg||$radius)){return $node;}
         $text=array_shift($texts);
+        // The glyph color lives on the text run, not the instance frame:
+        // hoist it so the button keeps its designed text color.
+        foreach($this->collect_runs($node) as $run){
+            $ink=(string)($run['style']['color']??'');
+            if(''!==$ink&&!isset($node['style']['color'])){$node['style']['color']=$ink;break;}
+        }
         // Detached descendants must leave the node table: the IR validator
         // rejects nodes unreachable from the roots as orphans.
         $drop=$this->collect_descendant_ids($node);
@@ -116,13 +135,12 @@ class Design_Core_Elementor_Figma_Design_IR_Adapter {
         return $node;
     }
 
-    private function collect_descendant_ids(array $node){
+    private function collect_runs(array $node){
         $out=array();
         foreach((array)($node['children']??array()) as $child_id){
-            $out[]=$child_id;
-            if(isset($this->nodes[$child_id])&&is_array($this->nodes[$child_id])){
-                foreach($this->collect_descendant_ids($this->nodes[$child_id]) as $nested){$out[]=$nested;}
-            }
+            if(!isset($this->nodes[$child_id])||!is_array($this->nodes[$child_id])){continue;}
+            $out[]=$this->nodes[$child_id];
+            foreach($this->collect_runs($this->nodes[$child_id]) as $nested){$out[]=$nested;}
         }
         return $out;
     }
@@ -135,6 +153,17 @@ class Design_Core_Elementor_Figma_Design_IR_Adapter {
             $t=trim((string)($child['content']['text']??''));
             if(''!==$t){$out[]=array('text'=>$t);}
             foreach($this->collect_texts($child) as $nested){$out[]=$nested;}
+        }
+        return $out;
+    }
+
+    private function collect_descendant_ids(array $node){
+        $out=array();
+        foreach((array)($node['children']??array()) as $child_id){
+            $out[]=$child_id;
+            if(isset($this->nodes[$child_id])&&is_array($this->nodes[$child_id])){
+                foreach($this->collect_descendant_ids($this->nodes[$child_id]) as $nested){$out[]=$nested;}
+            }
         }
         return $out;
     }
@@ -154,12 +183,13 @@ class Design_Core_Elementor_Figma_Design_IR_Adapter {
     }
 
     private function layout_governance(array $figma,array $layout){$horizontal=strtoupper((string)($figma['layoutSizingHorizontal']??''));$width=$layout['width']??null;if('FIXED'!==$horizontal||!is_array($width)||'px'!==($width['unit']??'')||(float)($width['value']??0)<=320){return array();}return array('fixed_width_exception'=>true,'reason'=>'Figma layoutSizingHorizontal=FIXED is an explicit authored fixed-width frame or instance, not an inferred width.');}
-    private function spacing(array $figma){$spacing=array();foreach(array('Top'=>'top','Right'=>'right','Bottom'=>'bottom','Left'=>'left') as $suffix=>$side){$key='padding'.$suffix;if(isset($figma[$key])&&is_numeric($figma[$key])){$spacing['padding_'.$side]=array('value'=>(float)$figma[$key],'unit'=>'px');}}return$spacing;}
+    private function spacing(array $figma){$spacing=array();foreach(array('Top'=>'top','Right'=>'right','Bottom'=>'bottom','Left'=>'left') as $suffix=>$side){$key='padding'.$suffix;if(isset($figma[$key])&&is_numeric($figma[$key])){$spacing['padding_'.$side]=array('value'=>(float)$figma[$key],'unit'=>'px');}}$overlap=isset($figma['_design_core_overlap_top'])?(float)$figma['_design_core_overlap_top']:0;if($overlap>0){$spacing['margin_top']=array('value'=>(float)-$overlap,'unit'=>'px');}return$spacing;}
 
     private function style(array $figma){
-        $style=array();foreach((array)($figma['fills']??array()) as $fill){if(!is_array($fill)||false===($fill['visible']??true)||'SOLID'!==strtoupper((string)($fill['type']??''))){continue;}$color=$this->rgba((array)($fill['color']??array()),(float)($fill['opacity']??1));if('TEXT'===strtoupper((string)($figma['type']??''))){$style['color']=$color;}else{$style['background_color']=$color;}break;}
-        $radius=$figma['cornerRadius']??null;if(is_numeric($radius)){$style['border_radius']=array('value'=>(float)$radius,'unit'=>'px');}if(isset($figma['opacity'])&&is_numeric($figma['opacity'])){$style['opacity']=(float)$figma['opacity'];}
-        $text=(array)($figma['style']??array());if($text){if(isset($text['fontFamily'])){$style['font_family']=sanitize_text_field((string)$text['fontFamily']);}if(isset($text['fontSize'])&&is_numeric($text['fontSize'])){$style['font_size']=array('value'=>(float)$text['fontSize'],'unit'=>'px');}if(isset($text['fontWeight'])&&is_numeric($text['fontWeight'])){$style['font_weight']=(int)$text['fontWeight'];}if(isset($text['lineHeightPx'])&&is_numeric($text['lineHeightPx'])){$style['line_height']=array('value'=>(float)$text['lineHeightPx'],'unit'=>'px');}if(isset($text['letterSpacing'])&&is_numeric($text['letterSpacing'])){$style['letter_spacing']=array('value'=>(float)$text['letterSpacing'],'unit'=>'px');}if(isset($text['textAlignHorizontal'])){$style['text_align']=strtolower((string)$text['textAlignHorizontal']);}}
+        $style=array();$solid=false;foreach((array)($figma['fills']??array()) as $fill){if(!is_array($fill)||false===($fill['visible']??true)||'SOLID'!==strtoupper((string)($fill['type']??''))){continue;}$color=$this->rgba((array)($fill['color']??array()),(float)($fill['opacity']??1));if('TEXT'===strtoupper((string)($figma['type']??''))){$style['color']=$color;}else{$style['background']=$color;}$solid=true;break;}
+        if(!$solid){foreach((array)($figma['fills']??array()) as $fill){if(!is_array($fill)||false===($fill['visible']??true)||'GRADIENT_LINEAR'!==strtoupper((string)($fill['type']??''))){continue;}$gradient=$this->gradient($fill);if(''!==$gradient){$style['css_fallback']['background']=$gradient;}break;}}
+        $radius=$figma['cornerRadius']??null;if(is_numeric($radius)){$style['radius']=array('value'=>(float)$radius,'unit'=>'px');}if(isset($figma['opacity'])&&is_numeric($figma['opacity'])){$style['opacity']=(float)$figma['opacity'];}
+        $text=(array)($figma['style']??array());if($text){if(isset($text['fontFamily'])){$style['font_family']=sanitize_text_field((string)$text['fontFamily']);}if(isset($text['fontSize'])&&is_numeric($text['fontSize'])){$style['font_size']=array('value'=>(float)$text['fontSize'],'unit'=>'px');}if(isset($text['fontWeight'])&&is_numeric($text['fontWeight'])){$style['font_weight']=(int)$text['fontWeight'];}if(isset($text['lineHeightPx'])&&is_numeric($text['lineHeightPx'])){$style['line_height']=array('value'=>(float)$text['lineHeightPx'],'unit'=>'px');}if(isset($text['letterSpacing'])&&is_numeric($text['letterSpacing'])){$style['letter_spacing']=array('value'=>(float)$text['letterSpacing'],'unit'=>'px');}if(isset($text['textAlignHorizontal'])){$style['align']=strtolower((string)$text['textAlignHorizontal']);}}
         $shadows=array();foreach((array)($figma['effects']??array()) as $effect){if(is_array($effect)&&false!==strpos(strtoupper((string)($effect['type']??'')),'SHADOW')){$shadows[]=Design_Core_Elementor_Change_Ledger::transport_safe($effect);}}if($shadows){$style['shadows']=$shadows;}return$style;
     }
 
@@ -174,5 +204,23 @@ class Design_Core_Elementor_Figma_Design_IR_Adapter {
     private function axis_alignment($value){$map=array('MIN'=>'flex-start','MAX'=>'flex-end','CENTER'=>'center','SPACE_BETWEEN'=>'space-between','BASELINE'=>'baseline');return$map[strtoupper((string)$value)]??'';}
     private function geometry(array $figma){$box=(array)($figma['absoluteBoundingBox']??array());return array('x'=>(float)($box['x']??0),'y'=>(float)($box['y']??0),'width'=>(float)($box['width']??0),'height'=>(float)($box['height']??0));}
     private function rgba(array $color,$opacity){$r=(int)round(255*(float)($color['r']??0));$g=(int)round(255*(float)($color['g']??0));$b=(int)round(255*(float)($color['b']??0));$a=max(0,min(1,(float)($color['a']??1)*$opacity));return$a>=0.999?sprintf('#%02x%02x%02x',$r,$g,$b):sprintf('rgba(%d,%d,%d,%.3f)',$r,$g,$b,$a);}
+    private function gradient(array $fill){
+        $stops=array();
+        foreach((array)($fill['gradientStops']??array()) as $stop){
+            if(!is_array($stop)||!isset($stop['position'])){continue;}
+            $stops[]=array('p'=>(float)$stop['position'],'c'=>$this->rgba((array)($stop['color']??array()),(float)($fill['opacity']??1)));
+        }
+        if(count($stops)<2){return '';}
+        usort($stops,static function($a,$b){return $a['p']<=>$b['p'];});
+        $handles=(array)($fill['gradientHandlePositions']??array());
+        $angle=135;
+        if(isset($handles[0]['x'],$handles[0]['y'],$handles[1]['x'],$handles[1]['y'])){
+            $dx=(float)$handles[1]['x']-(float)$handles[0]['x'];$dy=(float)$handles[1]['y']-(float)$handles[0]['y'];
+            if($dx||$dy){$angle=(int)round(90+atan2($dy,$dx)*180/M_PI);if($angle<0){$angle+=360;}}
+        }
+        $parts=array();
+        foreach($stops as $s){$parts[]=$s['c'].' '.round($s['p']*100,1).'%';}
+        return 'linear-gradient('.$angle.'deg,'.implode(',',$parts).')';
+    }
     private function extract_tokens(array $payload){return array('figma_styles'=>Design_Core_Elementor_Change_Ledger::transport_safe(is_array($payload['styles']??null)?$payload['styles']:array()),'figma_components'=>Design_Core_Elementor_Change_Ledger::transport_safe(is_array($payload['components']??null)?$payload['components']:array()),'figma_component_sets'=>Design_Core_Elementor_Change_Ledger::transport_safe(is_array($payload['componentSets']??null)?$payload['componentSets']:array()),'figma_variables'=>Design_Core_Elementor_Change_Ledger::transport_safe(is_array($payload['variables']??null)?$payload['variables']:array()));}
 }

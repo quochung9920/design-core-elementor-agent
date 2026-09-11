@@ -24,11 +24,27 @@ class Design_Core_Elementor_Elementor_Setting_Governor {
     public function govern( $element_type, $widget_type, array $settings, array $node = array(), $creating = true ) {
         $warnings = $this->dimension_warnings( $settings ); $applied = array();
         $display = strtolower( (string) ( $node['layout']['display'] ?? '' ) );
-        if ( 'container' === sanitize_key( (string) $element_type ) && 'flex' === $display && empty( $node['layout']['direction'] ) ) {
-            // CSS flex defaults to row, but Elementor containers default to
-            // column. Without an explicit direction every row layout stacks.
-            $dir_control = $this->registry->first_supported( 'container', '', array( 'flex_direction' ) );
-            if ( $dir_control && ! array_key_exists( $dir_control, $settings ) ) { $settings[ $dir_control ] = 'row'; $applied[] = $dir_control; }
+        if ( 'container' === sanitize_key( (string) $element_type ) && 'flex' === $display ) {
+            $dir = strtolower( (string) ( $node['layout']['direction'] ?? '' ) );
+            if ( '' === $dir ) {
+                // CSS flex defaults to row, but Elementor containers default to
+                // column. Without an explicit direction every row layout stacks.
+                $dir_control = $this->registry->first_supported( 'container', '', array( 'flex_direction' ) );
+                if ( $dir_control && ! array_key_exists( $dir_control, $settings ) ) { $settings[ $dir_control ] = 'row'; $applied[] = $dir_control; }
+                $dir = 'row';
+            }
+            if ( 'row' === $dir ) {
+                // Boxed Elementor containers force column via .e-con-boxed.e-flex
+                // regardless of flex-direction. A row container must be
+                // full-width, with the IR max-width re-expressed as centering.
+                $width_control = $this->registry->first_supported( 'container', '', array( 'content_width' ) );
+                if ( $width_control ) { $settings[ $width_control ] = 'full'; $applied[] = $width_control; }
+                $max = $node['layout']['max_width'] ?? null;
+                if ( is_array( $max ) && isset( $max['value'] ) && is_numeric( $max['value'] ) && false === strpos( (string) ( $settings['custom_css'] ?? '' ), 'max-width' ) ) {
+                    $unit = in_array( $max['unit'] ?? '', array( 'px', '%', 'em', 'rem', 'vw' ), true ) ? (string) $max['unit'] : 'px';
+                    $settings['custom_css'] = trim( (string) ( $settings['custom_css'] ?? '' ) ) . "\nselector{max-width:" . $max['value'] . $unit . ";margin-left:auto;margin-right:auto;}";
+                }
+            }
         }
         if ( 'container' === sanitize_key( (string) $element_type ) && 'grid' === $display ) {
             $result = $this->govern_grid( $settings, $node, (bool) $creating );

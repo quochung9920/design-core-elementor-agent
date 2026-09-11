@@ -280,6 +280,13 @@ class Design_Core_Elementor_Button_Control_Adapter extends Design_Core_Elementor
     public function map( $node ) {
         $node = $this->without_flex_align( $node );
         $result = parent::map( $node );
+        // background_color is conditional on a classic background mode. The
+        // source never states the mode explicitly, so declare it or the live
+        // schema drops the designed background during governance.
+        if ( isset( $result['settings']['background_color'] ) && $this->registry->first_supported( $this->element_type, $this->widget_type, array( 'background_background' ), 'choose' ) ) {
+            $result['settings']['background_background'] = 'classic';
+            $result['native'][] = 'background_background';
+        }
         // The button widget schema exposes no min-height control. Express the
         // authored minimum height on the rendered button itself: min-height on
         // the widget wrapper would not size the inner .elementor-button.
