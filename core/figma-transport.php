@@ -4,12 +4,12 @@ if ( ! defined( 'ABSPATH' ) ) { exit; }
 /**
  * Network/auth boundary for Figma.
  *
- * v2 adds bounded rendered-reference export and exact vector export so the
- * compiler can preserve vector/icon assets and compare the Elementor result
- * against Figma's own render instead of trusting inferred geometry alone.
+ * v3 keeps the v2 rendered-reference path and delegates vector discovery to a
+ * geometry-driven resolver so SVG icons, small composite instances and shape
+ * primitives are exported before they can decay into generic containers.
  */
 class Design_Core_Elementor_Figma_Transport {
-    const VERSION = 2;
+    const VERSION = 3;
     const API_BASE = 'https://api.figma.com/v1';
     const MAX_RESPONSE_BYTES = 12582912;
     const MAX_VECTOR_EXPORTS = 48;
@@ -36,7 +36,7 @@ class Design_Core_Elementor_Figma_Transport {
      *
      * Options:
      * - resolve_image_fills: map IMAGE fills to temporary CDN URLs.
-     * - resolve_vector_assets: export authored vector leaf nodes as SVG.
+     * - resolve_vector_assets: export authored vector/icon nodes as SVG.
      * - export_reference: export the selected node as a Figma-rendered PNG.
      */
     public function read_url( $url, array $options = array() ) {
@@ -138,6 +138,9 @@ class Design_Core_Elementor_Figma_Transport {
     }
 
     private function collect_vector_ids( array $root ) {
+        if ( class_exists( 'Design_Core_Elementor_Figma_Vector_Asset_Resolver' ) ) {
+            return ( new Design_Core_Elementor_Figma_Vector_Asset_Resolver() )->collect( $root, self::MAX_VECTOR_EXPORTS );
+        }
         $ids = array(); $queue = array( $root );
         while ( $queue && count( $ids ) < self::MAX_VECTOR_EXPORTS ) {
             $node = array_shift( $queue );
