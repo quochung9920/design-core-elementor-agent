@@ -4,13 +4,12 @@ if ( ! defined( 'ABSPATH' ) ) { exit; }
 /**
  * Section/element-aware visual feedback.
  *
- * v3 keeps screenshot similarity as the visual truth, automatically collects
- * rendered DOM/computed-style evidence when Playwright is available, aligns
- * reference/candidate elements conservatively and emits element-addressable,
- * native-control-first correction directives.
+ * v4 preserves exact Figma identity from browser evidence, prefers that identity
+ * before DOM/text heuristics, and understands structural/font blockers alongside
+ * perceptual screenshot evidence.
  */
 class Design_Core_Elementor_Visual_Feedback_Engine {
-    const VERSION = 3;
+    const VERSION = 4;
 
     public function evaluate_targets( $reference_target, $candidate_target, array $context = array() ) {
         $reference_target = trim( (string) $reference_target );
@@ -53,23 +52,31 @@ class Design_Core_Elementor_Visual_Feedback_Engine {
     }
 
     public function evaluate( array $screenshot_comparison, array $geometry_diffs = array(), $target_similarity = 0.95 ) {
-        $scores = array(); $failed = 0; $viewport_issues = array();
+        $scores = array(); $perceptual_scores = array(); $failed = 0; $viewport_issues = array();
         foreach ( $screenshot_comparison as $width => $result ) {
             if ( 'success' !== ( $result['status'] ?? '' ) || ! isset( $result['similarity'] ) ) {
                 $failed++; $viewport_issues[] = array( 'viewport' => (int) $width, 'category' => 'render', 'severity' => 'high', 'message' => (string) ( $result['error'] ?? 'Visual capture failed.' ) ); continue;
             }
             $similarity = (float) $result['similarity']; $scores[] = $similarity;
+            if ( isset( $result['perceptual_similarity'] ) ) { $perceptual_scores[] = (float) $result['perceptual_similarity']; }
             if ( $similarity < $target_similarity ) {
-                $viewport_issues[] = array( 'viewport' => (int) $width, 'category' => 'visual', 'severity' => $similarity < 0.80 ? 'high' : 'medium', 'similarity' => $similarity, 'difference_ratio' => $result['difference_ratio'] ?? null, 'message' => 'Screenshot differs from the reference at this viewport.' );
+                $viewport_issues[] = array(
+                    'viewport' => (int) $width, 'category' => 'visual', 'severity' => $similarity < 0.80 ? 'high' : 'medium',
+                    'similarity' => $similarity, 'perceptual_similarity' => $result['perceptual_similarity'] ?? null,
+                    'difference_ratio' => $result['difference_ratio'] ?? null, 'worst_regions' => (array) ( $result['worst_regions'] ?? array() ),
+                    'message' => 'Screenshot differs from the reference at this viewport.'
+                );
             }
         }
         $similarity = $scores ? array_sum( $scores ) / count( $scores ) : 0.0;
+        $perceptual = $perceptual_scores ? array_sum( $perceptual_scores ) / count( $perceptual_scores ) : null;
         $issues = array_merge( $viewport_issues, $this->geometry_issues( $geometry_diffs ) );
         $plan = $this->build_correction_plan( $issues );
         return array(
             'version' => self::VERSION,
             'status' => 0 === $failed && $similarity >= $target_similarity && empty( $plan ) ? 'pass' : 'needs-correction',
             'similarity' => $similarity,
+            'perceptual_similarity' => $perceptual,
             'target_similarity' => (float) $target_similarity,
             'failed_viewports' => $failed,
             'screenshot_comparison' => $screenshot_comparison,
@@ -119,6 +126,7 @@ class Design_Core_Elementor_Visual_Feedback_Engine {
                 'viewport' => (int) ( $issue['viewport'] ?? 0 ),
                 'device' => $this->device_from_viewport( (int) ( $issue['viewport'] ?? 0 ) ),
                 'path' => (string) ( $issue['path'] ?? '' ),
+                'figma_id' => sanitize_text_field( (string) ( $issue['figma_id'] ?? '' ) ),
                 'elementor_id' => sanitize_key( (string) ( $issue['elementor_id'] ?? '' ) ),
                 'widget_type' => sanitize_key( (string) ( $issue['widget_type'] ?? '' ) ),
                 'priority' => (string) ( $issue['severity'] ?? 'medium' ),
@@ -130,6 +138,8 @@ class Design_Core_Elementor_Visual_Feedback_Engine {
             elseif ( 'typography' === $category ) { $directive['controls'] = array( 'typography_font_size', 'typography_line_height', 'typography_letter_spacing', 'typography_font_weight', 'align' ); $directive['instruction'] = 'Match text metrics and alignment using runtime-verified widget typography controls.'; }
             elseif ( 'media' === $category ) { $directive['controls'] = array( 'object_fit', 'object_position', 'background_size', 'background_position' ); $directive['instruction'] = 'Correct media crop/position using runtime-verified image/background controls.'; }
             elseif ( 'surface' === $category ) { $directive['controls'] = array( 'border_radius' ); $directive['instruction'] = 'Correct simple surface radius using a live Elementor control.'; }
+            elseif ( in_array( $category, array( 'structure', 'figma-parent-mismatch', 'figma-node-missing' ), true ) ) { $directive['prefer'] = 'build-plan-rebuild'; $directive['controls'] = array(); $directive['instruction'] = 'Rebuild or reparent the affected composition; CSS/control nudges must not mask an incorrect source tree.'; }
+            elseif ( 'font' === $category ) { $directive['prefer'] = 'font-asset'; $directive['controls'] = array(); $directive['instruction'] = 'Load and verify the authored font family before changing typography metrics or accepting a fallback font.'; }
             elseif ( 'render' === $category ) { $directive['instruction'] = 'Resolve render/runtime failure before attempting visual correction.'; }
             else { $directive['controls'] = array(); $directive['instruction'] = 'Screenshot mismatch has no safe automatic control mapping yet.'; }
             if ( isset( $issue['details'] ) ) { $directive['details'] = $issue['details']; }
@@ -176,7 +186,7 @@ class Design_Core_Elementor_Visual_Feedback_Engine {
         foreach ( $diffs as $viewport => $paths ) {
             foreach ( $paths as $path => $diff ) {
                 $rect = (array) ( $diff['rect'] ?? array() ); $styles = (array) ( $diff['styles'] ?? array() ); $meta = (array) ( $diff['candidate_meta'] ?? array() );
-                $base = array( 'viewport' => (int) $viewport, 'path' => $path, 'elementor_id' => $meta['elementor_id'] ?? '', 'widget_type' => $meta['widget_type'] ?? '' );
+                $base = array( 'viewport' => (int) $viewport, 'path' => $path, 'figma_id' => $meta['figma_id'] ?? '', 'elementor_id' => $meta['elementor_id'] ?? '', 'widget_type' => $meta['widget_type'] ?? '' );
                 $geometry_styles = array_intersect_key( $styles, array_flip( $geometry_fields ) );
                 if ( $rect || $geometry_styles ) {
                     $max = 0.0; foreach ( $rect as $value ) { $max = max( $max, abs( (float) ( $value['delta'] ?? 0 ) ) ); }
@@ -226,7 +236,12 @@ class Design_Core_Elementor_Visual_Feedback_Engine {
                     'rect' => (array) ( $element['rect'] ?? array() ), 'styles' => (array) ( $element['styles'] ?? array() ),
                     'tag' => strtolower( (string) ( $element['tag'] ?? '' ) ), 'id' => (string) ( $element['id'] ?? '' ),
                     'text' => $this->normalize_text( $element['ownText'] ?? $element['text'] ?? '' ), 'index' => (int) ( $element['index'] ?? 0 ),
+                    'figma_class' => (string) ( $element['figmaClass'] ?? $element['figma_class'] ?? '' ),
+                    'figma_parent_class' => (string) ( $element['figmaParentClass'] ?? $element['figma_parent_class'] ?? '' ),
+                    'font_family_primary' => (string) ( $element['fontFamilyPrimary'] ?? $element['font_family_primary'] ?? '' ),
+                    'font_loaded' => $element['fontLoaded'] ?? $element['font_loaded'] ?? null,
                     'elementor_id' => sanitize_key( (string) ( $element['elementorId'] ?? $element['elementor_id'] ?? '' ) ),
+                    'parent_elementor_id' => sanitize_key( (string) ( $element['parentElementorId'] ?? $element['parent_elementor_id'] ?? '' ) ),
                     'elementor_type' => sanitize_key( (string) ( $element['elementorType'] ?? $element['elementor_type'] ?? '' ) ),
                     'widget_type' => sanitize_key( (string) ( $element['widgetType'] ?? $element['widget_type'] ?? '' ) ),
                 );
@@ -236,6 +251,11 @@ class Design_Core_Elementor_Visual_Feedback_Engine {
     }
 
     private function match_element( array $left, $path, array $candidate_paths ) {
+        if ( ! empty( $left['figma_class'] ) ) {
+            foreach ( $candidate_paths as $candidate_path => $candidate ) {
+                if ( (string) ( $candidate['figma_class'] ?? '' ) === (string) $left['figma_class'] ) { return array( 'path' => $candidate_path, 'element' => $candidate, 'method' => 'figma-node-class' ); }
+            }
+        }
         if ( isset( $candidate_paths[ $path ] ) ) { return array( 'path' => $path, 'element' => $candidate_paths[ $path ], 'method' => 'dom-path' ); }
         if ( ! empty( $left['id'] ) ) {
             foreach ( $candidate_paths as $candidate_path => $candidate ) { if ( (string) ( $candidate['id'] ?? '' ) === (string) $left['id'] ) { return array( 'path' => $candidate_path, 'element' => $candidate, 'method' => 'html-id' ); } }
@@ -259,7 +279,12 @@ class Design_Core_Elementor_Visual_Feedback_Engine {
     }
 
     private function meta( array $element ) {
-        return array( 'tag' => $element['tag'] ?? '', 'id' => $element['id'] ?? '', 'elementor_id' => $element['elementor_id'] ?? '', 'elementor_type' => $element['elementor_type'] ?? '', 'widget_type' => $element['widget_type'] ?? '' );
+        return array(
+            'tag' => $element['tag'] ?? '', 'id' => $element['id'] ?? '',
+            'figma_class' => $element['figma_class'] ?? '', 'figma_parent_class' => $element['figma_parent_class'] ?? '',
+            'elementor_id' => $element['elementor_id'] ?? '', 'parent_elementor_id' => $element['parent_elementor_id'] ?? '',
+            'elementor_type' => $element['elementor_type'] ?? '', 'widget_type' => $element['widget_type'] ?? ''
+        );
     }
 
     private function normalize_text( $value ) { return trim( preg_replace( '/\s+/u', ' ', (string) $value ) ); }
