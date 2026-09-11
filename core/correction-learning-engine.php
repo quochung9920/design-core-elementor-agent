@@ -74,7 +74,13 @@ class Design_Core_Elementor_Correction_Learning_Engine {
             ),
         ) );
         if ( is_wp_error( $lesson ) ) { return $lesson; }
-        return array( 'status' => 'learned', 'learned' => true, 'lesson' => $lesson, 'incident' => $incident );
+
+        $benchmark = array();
+        if ( class_exists( 'Design_Core_Elementor_Benchmark_Promoter' ) ) {
+            $proposed = ( new Design_Core_Elementor_Benchmark_Promoter() )->propose( $lesson, $incident );
+            if ( ! is_wp_error( $proposed ) ) { $benchmark = $proposed; }
+        }
+        return array( 'status' => 'learned', 'learned' => true, 'lesson' => $lesson, 'incident' => $incident, 'benchmark_candidate' => $benchmark );
     }
 
     public function eligible( array $run, $after = null ) {
