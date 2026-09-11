@@ -68,7 +68,7 @@ class Design_Core_Elementor_Visual_QA {
         );
     }
 
-    public function compare_targets( $reference_target, $candidate_target ) { return ( new Design_Core_Elementor_Screenshot_Service() )->compare_targets( $reference_target, $candidate_target ); }
+    public function compare_targets( $reference_target, $candidate_target ) { return new WP_Error( 'design_core_screenshot_removed', 'Screenshot comparison was removed from the local-only core build.' ); }
 
     private function fail( $page_id, $message ) { return array( 'page_id'=>(int)$page_id, 'status'=>'fail', 'score'=>0.0, 'issues'=>array( array( 'type'=>'critical','message'=>$message ) ), 'recommendations'=>array(), 'performance'=>array() ); }
     private function flatten( $elements ) { $out = array(); foreach ( $elements as $element ) { $out[] = $element; if ( ! empty( $element['elements'] ) ) { $out = array_merge( $out, $this->flatten( $element['elements'] ) ); } } return $out; }

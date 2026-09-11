@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node --check scripts/browser-probe.mjs && node --check scripts/browser-analyze.mjs && node --check scripts/browser-analyze-target.mjs && node --check scripts/capture-page.mjs && node --check scripts/visual-compare.mjs && node --check scripts/qa-air-page.mjs"
+    "check": "node --check scripts/browser-probe.mjs && node --check scripts/browser-analyze.mjs && node --check scripts/browser-analyze-target.mjs"
   },
   "devDependencies": {
     "pixelmatch": "^7.1.0",
