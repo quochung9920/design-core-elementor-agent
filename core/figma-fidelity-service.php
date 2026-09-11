@@ -4,10 +4,11 @@ if ( ! defined( 'ABSPATH' ) ) { exit; }
 /**
  * Strict Figma -> Elementor fidelity path.
  * Figma is authoritative: assets, reference render, versioned Design Memory,
- * exact node geometry, parent ownership and font proof are mandatory evidence.
+ * exact node geometry, parent ownership, font proof and responsive runtime
+ * safety are mandatory evidence.
  */
 class Design_Core_Elementor_Figma_Fidelity_Service {
-    const VERSION = 3;
+    const VERSION = 4;
     const DEFAULT_TARGET_SIMILARITY = 0.95;
 
     public function prepare( $figma_url, array $options = array() ) {
@@ -63,7 +64,7 @@ class Design_Core_Elementor_Figma_Fidelity_Service {
                 'asset_diagnostics' => Design_Core_Elementor_Change_Ledger::transport_safe( $asset_diagnostics ),
                 'reference_exported' => true, 'memory_lessons' => count( (array) ( $memory['lessons'] ?? array() ) ), 'memory_strategies' => array_values( (array) ( $memory['strategies'] ?? array() ) ),
                 'memory_skipped_incompatible' => (int) ( $memory['skipped_incompatible'] ?? 0 ),
-                'policy' => 'figma-is-authoritative-strict-assets-versioned-memory-geometry-structure-font-and-rendered-verification',
+                'policy' => 'figma-is-authoritative-strict-assets-versioned-memory-geometry-structure-font-responsive-runtime-and-rendered-verification',
             ),
         );
     }
@@ -132,19 +133,24 @@ class Design_Core_Elementor_Figma_Fidelity_Service {
         $geometry_report = array( 'status' => 'unavailable', 'differences' => array() );
         $structure_report = array( 'status' => 'unavailable', 'issues' => array() );
         $font_report = array( 'status' => 'unavailable', 'issues' => array() );
+        $responsive_report = array( 'status' => 'unavailable', 'mode' => 'inferred-runtime', 'issues' => array() );
         $analysis_error = '';
         $candidate_analysis = array();
+        $responsive_widths = array_values( array_filter( array( 1024, 768, 390 ), static fn( $v ) => $v < $width ) );
+        $analysis_widths = array_values( array_unique( array_merge( array( $width ), $responsive_widths ) ) );
         if ( ! class_exists( 'Design_Core_Elementor_Browser_Analysis_Service' ) ) { $analysis_error = 'Rendered DOM analysis is unavailable.'; }
         else {
             $browser = new Design_Core_Elementor_Browser_Analysis_Service();
             if ( ! $browser->is_available() ) { $analysis_error = 'Rendered DOM analysis is unavailable.'; }
             else {
-                $candidate_analysis = $browser->analyze_target( (string) $candidate_target, array( $width ), $allowed_hosts );
+                $candidate_analysis = $browser->analyze_target( (string) $candidate_target, $analysis_widths, $allowed_hosts );
                 if ( is_wp_error( $candidate_analysis ) ) { $analysis_error = $candidate_analysis->get_error_message(); $candidate_analysis = array(); }
                 else {
                     if ( class_exists( 'Design_Core_Elementor_Figma_Geometry_Verifier' ) ) { $geometry_report = ( new Design_Core_Elementor_Figma_Geometry_Verifier() )->report( (array) $prepared['design_ir'], $candidate_analysis, $width ); }
                     if ( class_exists( 'Design_Core_Elementor_Figma_Structure_Verifier' ) ) { $structure_report = ( new Design_Core_Elementor_Figma_Structure_Verifier() )->report( (array) $prepared['design_ir'], $candidate_analysis, $width ); }
                     if ( class_exists( 'Design_Core_Elementor_Figma_Font_Verifier' ) ) { $font_report = ( new Design_Core_Elementor_Figma_Font_Verifier() )->report( (array) $prepared['design_ir'], $candidate_analysis, $width ); }
+                    if ( $responsive_widths && class_exists( 'Design_Core_Elementor_Figma_Responsive_Verifier' ) ) { $responsive_report = ( new Design_Core_Elementor_Figma_Responsive_Verifier() )->report( (array) $prepared['design_ir'], $candidate_analysis, $responsive_widths ); }
+                    elseif ( ! $responsive_widths ) { $responsive_report = array( 'status' => 'pass', 'mode' => 'source-is-smallest-governed-viewport', 'reference_fidelity' => 'source-only', 'issues' => array(), 'expected' => 0, 'verified' => 0, 'match_ratio' => 1 ); }
                 }
             }
         }
@@ -174,25 +180,33 @@ class Design_Core_Elementor_Figma_Fidelity_Service {
         if ( $analysis_error ) { $visual['status'] = 'unavailable'; }
         elseif ( ! $geometry_verified || ! $structure_verified || ! $font_verified || $strict_issues ) { $visual['status'] = 'needs-correction'; }
 
-        $architecture = array( 'status' => 'unverified' ); $responsive = array( 'status' => 'unverified' ); $ux = array( 'status' => 'unverified' );
+        $architecture = array( 'status' => 'unverified' ); $ux = array( 'status' => 'unverified' );
         $page_id = (int) ( $options['page_id'] ?? 0 );
         if ( $page_id > 0 ) {
             $qa = ( new Design_Core_Elementor_Visual_QA() )->audit_page( $page_id );
             $architecture = array( 'status' => in_array( $qa['status'] ?? '', array( 'pass', 'warning' ), true ) ? 'pass' : 'fail', 'score' => (float) ( $qa['score'] ?? 0 ) );
-            // A single desktop Figma frame cannot prove mobile fidelity. Existing
-            // responsive controls are useful evidence but remain unverified unless
-            // the caller explicitly supplies independent responsive verification.
-            $responsive = ! empty( $options['responsive_verified'] ) ? array( 'status' => 'pass' ) : array( 'status' => 'unverified', 'evidence' => ! empty( $qa['responsive_override_count'] ) ? 'responsive-controls-present' : 'no-responsive-proof' );
             $ux = (array) ( $qa['ux_quality'] ?? array( 'status' => 'unverified' ) );
         }
+        $responsive = array(
+            'status' => 'pass' === (string) ( $responsive_report['status'] ?? '' ) ? 'pass' : ( 'fail' === (string) ( $responsive_report['status'] ?? '' ) ? 'fail' : 'unverified' ),
+            'score' => isset( $responsive_report['match_ratio'] ) ? round( (float) $responsive_report['match_ratio'] * 100, 2 ) : null,
+            'verification_mode' => (string) ( $responsive_report['mode'] ?? 'unavailable' ),
+            'reference_fidelity' => (string) ( $responsive_report['reference_fidelity'] ?? 'not-claimed' ),
+            'report' => $responsive_report,
+        );
         $gate = ( new Design_Core_Elementor_Visual_Quality_Gate() )->evaluate( array( 'architecture' => $architecture, 'responsive' => $responsive, 'visual' => $visual, 'interaction' => array( 'status' => ! empty( $options['interactive'] ) ? 'unverified' : 'not-applicable' ), 'ux' => $ux ), array( 'reference_exists' => true, 'interactive' => ! empty( $options['interactive'] ) ) );
 
         $learning = array();
         if ( class_exists( 'Design_Core_Elementor_Correction_Learning_Engine' ) ) {
-            $learning = ( new Design_Core_Elementor_Correction_Learning_Engine() )->observe_verification( $visual, array( 'source_kind' => 'figma', 'source_fingerprint' => sanitize_key( (string) ( $prepared['source_fingerprint'] ?? '' ) ), 'project_scope_key' => Design_Core_Elementor_Design_Memory_Store::project_scope_key(), 'page_id' => $page_id, 'design_ir' => (array) ( $prepared['design_ir'] ?? array() ) ) );
+            $learning_observation = $visual;
+            if ( empty( $gate['publishable'] ) ) {
+                $learning_observation['status'] = 'needs-correction';
+                $learning_observation['issues'] = array_merge( (array) ( $learning_observation['issues'] ?? array() ), (array) ( $responsive_report['issues'] ?? array() ) );
+            }
+            $learning = ( new Design_Core_Elementor_Correction_Learning_Engine() )->observe_verification( $learning_observation, array( 'source_kind' => 'figma', 'source_fingerprint' => sanitize_key( (string) ( $prepared['source_fingerprint'] ?? '' ) ), 'project_scope_key' => Design_Core_Elementor_Design_Memory_Store::project_scope_key(), 'page_id' => $page_id, 'design_ir' => (array) ( $prepared['design_ir'] ?? array() ) ) );
         }
-        if ( $page_id > 0 ) { update_post_meta( $page_id, '_design_core_figma_visual_verification', array( 'visual' => $visual, 'quality_gate' => $gate, 'learning' => $learning, 'reference' => $reference, 'verified_at' => gmdate( 'c' ) ) ); }
-        return array( 'status' => 'pass' === ( $visual['status'] ?? '' ) && ! empty( $gate['publishable'] ) ? 'verified' : 'needs-correction', 'version' => self::VERSION, 'page_id' => $page_id, 'reference_image' => $reference, 'candidate_target' => (string) $candidate_target, 'candidate_selector' => $selector, 'source_viewport_width' => $width, 'source_fingerprint' => sanitize_key( (string) ( $prepared['source_fingerprint'] ?? '' ) ), 'visual' => $visual, 'quality_gate' => $gate, 'learning' => $learning );
+        if ( $page_id > 0 ) { update_post_meta( $page_id, '_design_core_figma_visual_verification', array( 'visual' => $visual, 'responsive' => $responsive, 'quality_gate' => $gate, 'learning' => $learning, 'reference' => $reference, 'verified_at' => gmdate( 'c' ) ) ); }
+        return array( 'status' => 'pass' === ( $visual['status'] ?? '' ) && ! empty( $gate['publishable'] ) ? 'verified' : 'needs-correction', 'version' => self::VERSION, 'page_id' => $page_id, 'reference_image' => $reference, 'candidate_target' => (string) $candidate_target, 'candidate_selector' => $selector, 'source_viewport_width' => $width, 'source_fingerprint' => sanitize_key( (string) ( $prepared['source_fingerprint'] ?? '' ) ), 'visual' => $visual, 'responsive' => $responsive, 'quality_gate' => $gate, 'learning' => $learning );
     }
 
     private function root_node( array $ir ) { $root_id = (string) ( $ir['root_ids'][0] ?? '' ); foreach ( (array) ( $ir['nodes'] ?? array() ) as $node ) { if ( (string) ( $node['id'] ?? '' ) === $root_id ) { return $node; } } return array(); }
