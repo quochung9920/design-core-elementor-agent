@@ -3,7 +3,7 @@ if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 /** Governed allow-list of compiler-safe learning strategies. */
 class Design_Core_Elementor_Fidelity_Rule_Registry {
-    const VERSION = 1;
+    const VERSION = 2;
 
     public static function strategies() {
         return array(
@@ -15,6 +15,8 @@ class Design_Core_Elementor_Fidelity_Rule_Registry {
             'preserve-fill-flex' => 'Translate Figma FILL sizing into deterministic non-collapsing flex behavior.',
             'preserve-fixed-media-height' => 'Keep authored fixed media height and clipping instead of letting content collapse the frame.',
             'verify-figma-node-geometry' => 'Use exact Figma-node identity and source geometry during rendered verification.',
+            'verify-figma-parent-structure' => 'Verify each rendered Figma node remains under the authored composition parent.',
+            'verify-font-fidelity' => 'Require authored Figma font families to be present and loaded in the rendered browser.',
         );
     }
 
@@ -22,7 +24,7 @@ class Design_Core_Elementor_Fidelity_Rule_Registry {
 
     /** Reviewed global lessons for fidelity regressions already understood by the compiler. */
     public static function seed_lessons() {
-        $common = array( 'scope' => 'global', 'scope_key' => '', 'verified' => true, 'confidence' => 0.99, 'verified_hits' => 1, 'origin' => 'core-seed', 'source_kind' => 'figma', 'min_core_version' => '1.0.0-rc24' );
+        $common = array( 'scope' => 'global', 'scope_key' => '', 'verified' => true, 'confidence' => 0.99, 'verified_hits' => 1, 'origin' => 'core-seed', 'source_kind' => 'figma', 'min_core_version' => '1.0.0-rc24', 'rule_registry_version' => self::VERSION );
         $definitions = array(
             array( 'signature' => 'figma.vector-component.asset', 'strategy' => 'preserve-vector-asset', 'reason' => 'Missing vector resolution turns icons into empty/generic Elementor containers.' ),
             array( 'signature' => 'figma.button.icon-composition', 'strategy' => 'preserve-icon-composition', 'reason' => 'Flattening icon-bearing button instances deletes authored arrows/icons.' ),
@@ -32,6 +34,8 @@ class Design_Core_Elementor_Fidelity_Rule_Registry {
             array( 'signature' => 'figma.auto-layout.fill', 'strategy' => 'preserve-fill-flex', 'reason' => 'FILL columns must not collapse when mapped to Elementor containers.' ),
             array( 'signature' => 'figma.media.fixed-height', 'strategy' => 'preserve-fixed-media-height', 'reason' => 'Fixed Figma media frames require a deterministic rendered height.' ),
             array( 'signature' => 'figma.rendered-node.geometry', 'strategy' => 'verify-figma-node-geometry', 'reason' => 'Rendered verification must compare the exact Figma node to its Elementor owner, not infer by text/index.' ),
+            array( 'signature' => 'figma.rendered-node.parent', 'strategy' => 'verify-figma-parent-structure', 'reason' => 'Rendered nodes may have correct rectangles while belonging to the wrong parent composition.' ),
+            array( 'signature' => 'figma.rendered-font.family', 'strategy' => 'verify-font-fidelity', 'reason' => 'A visually similar fallback font must never count as verified source typography.' ),
         );
         return array_map( static fn( $lesson ) => array_merge( $common, $lesson ), $definitions );
     }
