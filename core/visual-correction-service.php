@@ -1,26 +1,42 @@
 <?php
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-/** Governed compare -> correct -> verify loop. */
+/** Governed compare -> correct -> verify loop with verified Design Memory learning. */
 class Design_Core_Elementor_Visual_Correction_Service {
-    const VERSION = 2;
+    const VERSION = 3;
 
     public function run( $reference_target, $candidate_target, $max_iterations = 3, $target_similarity = 0.95, array $context = array() ) {
         $history = array();
         $max_iterations = max( 1, min( 5, (int) $max_iterations ) );
         $engine = new Design_Core_Elementor_Visual_Feedback_Engine();
+        $learning_engine = class_exists( 'Design_Core_Elementor_Correction_Learning_Engine' ) ? new Design_Core_Elementor_Correction_Learning_Engine() : null;
         $page_id = (int) ( $context['page_id'] ?? 0 );
         if ( $page_id <= 0 && function_exists( 'url_to_postid' ) && preg_match( '#^https?://#i', (string) $candidate_target ) ) { $page_id = (int) url_to_postid( (string) $candidate_target ); }
         if ( $page_id > 0 && ! $this->candidate_matches_page( (string) $candidate_target, $page_id ) ) {
             return new WP_Error( 'design_core_visual_correction_candidate_mismatch', 'Automatic correction refused because the candidate target could not be proven to represent the requested Elementor page.' );
         }
+        $learning_context = array_merge( $context, array( 'page_id' => $page_id ) );
 
         for ( $iteration = 1; $iteration <= $max_iterations; $iteration++ ) {
             $feedback_context = array_merge( $context, array( 'page_id' => $page_id, 'target_similarity' => (float) $target_similarity ) );
             $feedback = $engine->evaluate_targets( $reference_target, $candidate_target, $feedback_context );
             if ( is_wp_error( $feedback ) ) { return $feedback; }
             $entry = array( 'iteration' => $iteration, 'feedback' => $feedback, 'application' => array() );
-            if ( 'pass' === ( $feedback['status'] ?? '' ) ) { $history[] = $entry; return array( 'version' => self::VERSION, 'status' => 'pass', 'iterations' => $history, 'similarity' => (float) ( $feedback['similarity'] ?? 0 ) ); }
+
+            if ( 'pass' === ( $feedback['status'] ?? '' ) ) {
+                $history[] = $entry;
+                $learning = array();
+                if ( $learning_engine ) {
+                    $learning = count( $history ) > 1
+                        ? array( 'status' => 'verified-recovery', 'lessons' => $learning_engine->record_verified_recovery( $history, $learning_context ) )
+                        : $learning_engine->observe_verification( $feedback, $learning_context );
+                }
+                return array( 'version' => self::VERSION, 'status' => 'pass', 'iterations' => $history, 'similarity' => (float) ( $feedback['similarity'] ?? 0 ), 'learning' => $learning );
+            }
+
+            if ( 1 === $iteration && $learning_engine ) {
+                $entry['learning'] = $learning_engine->observe_verification( $feedback, $learning_context );
+            }
 
             $directives = (array) ( $feedback['correction_plan'] ?? array() );
             $application = null;
@@ -45,6 +61,7 @@ class Design_Core_Elementor_Visual_Correction_Service {
                     'similarity' => (float) ( $feedback['similarity'] ?? 0 ),
                     'directives' => $directives,
                     'reason' => $page_id <= 0 ? 'Candidate URL could not be resolved to an Elementor page for governed correction.' : 'No runtime-verified control changes could be applied.',
+                    'learning' => $entry['learning'] ?? array(),
                 );
             }
         }
