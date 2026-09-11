@@ -1,13 +1,7 @@
 <?php
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-/**
- * Allow-list of compiler-safe learning strategies.
- *
- * Design Memory can select these strategies, but it can never inject arbitrary
- * PHP/CSS or invent a new mutation. New strategies must be implemented and
- * reviewed here first, which keeps future learning deterministic and auditable.
- */
+/** Governed allow-list of compiler-safe learning strategies. */
 class Design_Core_Elementor_Fidelity_Rule_Registry {
     const VERSION = 1;
 
@@ -24,22 +18,11 @@ class Design_Core_Elementor_Fidelity_Rule_Registry {
         );
     }
 
-    public static function supports_strategy( $strategy ) {
-        return isset( self::strategies()[ sanitize_key( (string) $strategy ) ] );
-    }
+    public static function supports_strategy( $strategy ) { return isset( self::strategies()[ sanitize_key( (string) $strategy ) ] ); }
 
-    /** Core lessons are verified by regression incidents already fixed in RC23/RC24. */
+    /** Reviewed global lessons for fidelity regressions already understood by the compiler. */
     public static function seed_lessons() {
-        $common = array(
-            'scope' => 'global',
-            'scope_key' => '',
-            'verified' => true,
-            'confidence' => 0.99,
-            'verified_hits' => 1,
-            'origin' => 'core-seed',
-            'source_kind' => 'figma',
-            'min_core_version' => '1.0.0-rc24',
-        );
+        $common = array( 'scope' => 'global', 'scope_key' => '', 'verified' => true, 'confidence' => 0.99, 'verified_hits' => 1, 'origin' => 'core-seed', 'source_kind' => 'figma', 'min_core_version' => '1.0.0-rc24' );
         $definitions = array(
             array( 'signature' => 'figma.vector-component.asset', 'strategy' => 'preserve-vector-asset', 'reason' => 'Missing vector resolution turns icons into empty/generic Elementor containers.' ),
             array( 'signature' => 'figma.button.icon-composition', 'strategy' => 'preserve-icon-composition', 'reason' => 'Flattening icon-bearing button instances deletes authored arrows/icons.' ),
@@ -50,14 +33,13 @@ class Design_Core_Elementor_Fidelity_Rule_Registry {
             array( 'signature' => 'figma.media.fixed-height', 'strategy' => 'preserve-fixed-media-height', 'reason' => 'Fixed Figma media frames require a deterministic rendered height.' ),
             array( 'signature' => 'figma.rendered-node.geometry', 'strategy' => 'verify-figma-node-geometry', 'reason' => 'Rendered verification must compare the exact Figma node to its Elementor owner, not infer by text/index.' ),
         );
-        return array_map( static function ( $lesson ) use ( $common ) { return array_merge( $common, $lesson ); }, $definitions );
+        return array_map( static fn( $lesson ) => array_merge( $common, $lesson ), $definitions );
     }
 
     /**
-     * Apply only deterministic, source-derived rules. Most strategies influence
-     * earlier transport/adapter decisions; this final IR pass hardens the two
-     * cases that can safely be repaired without guessing: small primitives and
-     * fixed media height. Everything applied is reported in diagnostics.
+     * Apply only deterministic source-derived rules. Strategies that belong to
+     * transport/adapter/verification are already enforced there; this IR pass
+     * hardens values that can be repaired without design guessing.
      */
     public function apply_to_ir( array $ir, array $retrieval = array() ) {
         $strategies = array();
@@ -70,8 +52,10 @@ class Design_Core_Elementor_Fidelity_Rule_Registry {
             if ( ! is_array( $node ) ) { continue; }
             if ( isset( $strategies['fixed-small-primitive'] ) && $this->is_small_primitive( $node ) ) {
                 $geo = (array) ( $node['figma']['geometry'] ?? array() );
-                $width = (float) ( $geo['width'] ?? 0 );
-                $height = (float) ( $geo['height'] ?? 0 );
+                $width = (float) ( $geo['width'] ?? 0 ); $height = (float) ( $geo['height'] ?? 0 );
+                $ir['nodes'][ $index ]['layout'] = is_array( $node['layout'] ?? null ) ? $node['layout'] : array();
+                $ir['nodes'][ $index ]['layout']['width'] = array( 'value' => round( $width, 3 ), 'unit' => 'px' );
+                $ir['nodes'][ $index ]['layout']['min_height'] = array( 'value' => round( $height, 3 ), 'unit' => 'px' );
                 $ir['nodes'][ $index ]['style'] = is_array( $node['style'] ?? null ) ? $node['style'] : array();
                 $ir['nodes'][ $index ]['style']['css_fallback'] = is_array( $ir['nodes'][ $index ]['style']['css_fallback'] ?? null ) ? $ir['nodes'][ $index ]['style']['css_fallback'] : array();
                 $ir['nodes'][ $index ]['style']['css_fallback']['width'] = $this->px( $width );
@@ -85,6 +69,8 @@ class Design_Core_Elementor_Fidelity_Rule_Registry {
             if ( isset( $strategies['preserve-fixed-media-height'] ) && $this->is_fixed_media( $node ) ) {
                 $height = (float) ( $node['figma']['geometry']['height'] ?? 0 );
                 if ( $height > 0 ) {
+                    $ir['nodes'][ $index ]['layout'] = is_array( $node['layout'] ?? null ) ? $node['layout'] : array();
+                    $ir['nodes'][ $index ]['layout']['min_height'] = array( 'value' => round( $height, 3 ), 'unit' => 'px' );
                     $ir['nodes'][ $index ]['style'] = is_array( $node['style'] ?? null ) ? $node['style'] : array();
                     $ir['nodes'][ $index ]['style']['css_fallback'] = is_array( $ir['nodes'][ $index ]['style']['css_fallback'] ?? null ) ? $ir['nodes'][ $index ]['style']['css_fallback'] : array();
                     $ir['nodes'][ $index ]['style']['css_fallback']['height'] = $this->px( $height );
@@ -95,7 +81,7 @@ class Design_Core_Elementor_Fidelity_Rule_Registry {
         $ir['diagnostics'] = is_array( $ir['diagnostics'] ?? null ) ? $ir['diagnostics'] : array();
         $ir['diagnostics']['design_memory'] = array(
             'rule_registry_version' => self::VERSION,
-            'retrieved_signatures' => array_values( array_unique( array_map( static fn( $x ) => sanitize_key( (string) ( $x['signature'] ?? '' ) ), (array) ( $retrieval['lessons'] ?? array() ) ) ) ),
+            'retrieved_signatures' => array_values( array_unique( array_map( static fn( $x ) => Design_Core_Elementor_Design_Memory_Store::signature_key( $x['signature'] ?? '' ), (array) ( $retrieval['lessons'] ?? array() ) ) ) ),
             'strategies' => array_keys( $strategies ),
             'applied' => $applied,
         );
@@ -107,10 +93,8 @@ class Design_Core_Elementor_Fidelity_Rule_Registry {
         if ( ! in_array( $type, array( 'ELLIPSE', 'RECTANGLE', 'VECTOR', 'BOOLEAN_OPERATION', 'LINE', 'STAR', 'POLYGON', 'INSTANCE', 'FRAME' ), true ) ) { return false; }
         if ( '' !== trim( (string) ( $node['content']['text'] ?? '' ) ) ) { return false; }
         $geo = (array) ( $node['figma']['geometry'] ?? array() );
-        $width = (float) ( $geo['width'] ?? 0 );
-        $height = (float) ( $geo['height'] ?? 0 );
-        if ( $width <= 0 || $height <= 0 || $width > 32 || $height > 32 ) { return false; }
-        return true;
+        $width = (float) ( $geo['width'] ?? 0 ); $height = (float) ( $geo['height'] ?? 0 );
+        return $width > 0 && $height > 0 && $width <= 32 && $height <= 32;
     }
 
     private function is_fixed_media( array $node ) {
@@ -118,10 +102,8 @@ class Design_Core_Elementor_Fidelity_Rule_Registry {
         $vertical = strtoupper( (string) ( $sizing['vertical'] ?? $sizing['vertical_mode'] ?? '' ) );
         $has_media = ! empty( $node['assets']['images'] ) || ! empty( $node['style']['background_image'] );
         $geo = (array) ( $node['figma']['geometry'] ?? array() );
-        return $has_media && in_array( $vertical, array( 'FIXED', 'FILL' ), true ) && (float) ( $geo['height'] ?? 0 ) >= 40;
+        return $has_media && in_array( $vertical, array( 'FIXED', 'FILL', 'FILL_CONTAINER' ), true ) && (float) ( $geo['height'] ?? 0 ) >= 40;
     }
 
-    private function px( $value ) {
-        return rtrim( rtrim( number_format( (float) $value, 3, '.', '' ), '0' ), '.' ) . 'px';
-    }
+    private function px( $value ) { return rtrim( rtrim( number_format( (float) $value, 3, '.', '' ), '0' ), '.' ) . 'px'; }
 }
