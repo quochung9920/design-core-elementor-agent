@@ -26,11 +26,11 @@ class Design_Core_Elementor_Browser_Analysis_Service {
         $cached = get_transient( $cache_key );
         if ( is_array( $cached ) ) { $cached['cache'] = 'hit'; return $cached; }
 
-        $tmp = wp_tempnam( 'design-core-browser.html' );
+        $tmp = function_exists( 'wp_tempnam' ) ? wp_tempnam( 'design-core-browser.html' ) : tempnam( sys_get_temp_dir(), 'design-core-browser-' );
         if ( ! $tmp ) { return new WP_Error( 'design_core_temp_failed', 'Unable to create browser analysis file.' ); }
         file_put_contents( $tmp, '<!doctype html><html><head><meta charset="utf-8"><style>' . $css . '</style></head><body>' . $html . '</body></html>', LOCK_EX );
         $result = $this->analyze_file( $tmp, $viewports ); @unlink( $tmp );
-        if ( ! is_wp_error( $result ) ) { $result['cache'] = 'miss'; set_transient( $cache_key, $result, HOUR_IN_SECONDS ); }
+        if ( ! is_wp_error( $result ) ) { $result['cache'] = 'miss'; set_transient( $cache_key, $result, defined( 'HOUR_IN_SECONDS' ) ? HOUR_IN_SECONDS : 3600 ); }
         return $result;
     }
 

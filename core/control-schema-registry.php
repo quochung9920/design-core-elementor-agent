@@ -31,12 +31,21 @@ class Design_Core_Elementor_Control_Schema_Registry {
         $this->provider = is_callable( $provider ) ? $provider : array( $this, 'runtime_controls' );
     }
 
+    private function is_default_provider() {
+        return is_array( $this->provider ) && isset( $this->provider[0], $this->provider[1] ) && $this->provider[0] === $this && 'runtime_controls' === $this->provider[1];
+    }
+
     public function schema( $element_type, $widget_type = '', $include_machine_schema = false ) {
         $element_type = sanitize_key( (string) $element_type );
         $widget_type = sanitize_key( (string) $widget_type );
         $key = $element_type . ':' . $widget_type;
+        $use_process_cache = $this->is_default_provider();
 
-        if ( ! isset( self::$process_cache[ $key ] ) ) {
+        if ( $use_process_cache && isset( self::$process_cache[ $key ] ) ) {
+            $this->cache[ $key ] = self::$process_cache[ $key ];
+        } elseif ( ! $use_process_cache && isset( $this->cache[ $key ] ) ) {
+            // Custom provider (tests, bounded stubs): instance cache only.
+        } else {
             $stacks = call_user_func( $this->provider, $element_type, $widget_type );
             if ( is_wp_error( $stacks ) || ! is_array( $stacks ) ) { $stacks = array(); }
             $controls = array_merge(
@@ -75,9 +84,7 @@ class Design_Core_Elementor_Control_Schema_Registry {
                     'elementor_pro' => defined( 'ELEMENTOR_PRO_VERSION' ) ? (string) ELEMENTOR_PRO_VERSION : '',
                 ),
             );
-            self::$process_cache[ $key ] = $this->cache[ $key ];
-        } else {
-            $this->cache[ $key ] = self::$process_cache[ $key ];
+            if ( $use_process_cache ) { self::$process_cache[ $key ] = $this->cache[ $key ]; }
         }
 
         $schema = $this->cache[ $key ];

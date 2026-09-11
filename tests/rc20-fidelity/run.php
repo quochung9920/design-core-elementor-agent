@@ -58,29 +58,29 @@ $parsed = $transport->parse_url( 'https://www.figma.com/design/1nleuMMcXfzSgHGwl
 dc_assert( ! is_wp_error( $parsed ) && '1nleuMMcXfzSgHGwle3v78' === ( $parsed['file_key'] ?? '' ), 'Figma transport parses file key' );
 dc_assert( '73224:44' === ( $parsed['node_id'] ?? '' ), 'Figma transport normalizes node-id' );
 
-// Figma Adapter v3 consumes transport wrapper, runs pre-IR normalization, resolves imageRef and preserves sizing/component evidence.
+// Figma Adapter v4 consumes transport wrapper, runs pre-IR normalization, resolves imageRef and preserves sizing/component evidence.
 $figma_wrapper = array(
     'source' => array('node_id'=>'1:1'),
     'image_fills' => array('img-ref'=>'https://cdn.example.test/figma-image.png'),
     'figma' => array('document'=>array(
         'id'=>'1:1','type'=>'FRAME','name'=>'Hero','layoutMode'=>'HORIZONTAL','layoutSizingHorizontal'=>'FIXED','absoluteBoundingBox'=>array('width'=>1200,'height'=>600),
         'children'=>array(
-            array('id'=>'1:2','type'=>'INSTANCE','name'=>'Hero card','componentId'=>'component:1','componentProperties'=>array('Variant'=>array('type'=>'VARIANT','value'=>'Large')),'layoutSizingHorizontal'=>'FILL','absoluteBoundingBox'=>array('width'=>500,'height'=>300),'fills'=>array(array('type'=>'IMAGE','imageRef'=>'img-ref','scaleMode'=>'FILL'))),
+            array('id'=>'1:2','type'=>'INSTANCE','name'=>'Hero card','componentId'=>'component:1','componentProperties'=>array('Variant'=>array('type'=>'VARIANT','value'=>'Large')),'layoutSizingHorizontal'=>'FIXED','absoluteBoundingBox'=>array('width'=>500,'height'=>300),'fills'=>array(array('type'=>'IMAGE','imageRef'=>'img-ref','scaleMode'=>'FILL'))),
         ),
     )),
 );
 $figma_ir = ( new Design_Core_Elementor_Figma_Design_IR_Adapter() )->convert( $figma_wrapper );
-dc_assert( ! is_wp_error( $figma_ir ) && 3 === Design_Core_Elementor_Figma_Design_IR_Adapter::VERSION, 'Figma Adapter v3 produces Design IR' );
+dc_assert( ! is_wp_error( $figma_ir ) && 4 === Design_Core_Elementor_Figma_Design_IR_Adapter::VERSION, 'Figma Adapter v4 produces Design IR' );
 $image_node = null; $root_node = null;
 if ( ! is_wp_error( $figma_ir ) ) {
     foreach ( $figma_ir['nodes'] as $node ) {
         if ( ! empty( $node['assets']['images'] ) ) { $image_node = $node; }
         if ( $node['id'] === ( $figma_ir['root_ids'][0] ?? '' ) ) { $root_node = $node; }
     }
-    dc_assert( 3 === (int) ( $figma_ir['diagnostics']['figma_adapter_version'] ?? 0 ), 'Figma v3 IR diagnostics report the adapter version' );
-    dc_assert( isset( $figma_ir['diagnostics']['normalization'] ) && 2 === (int) ( $figma_ir['diagnostics']['normalization']['nodes'] ?? 0 ), 'Figma v3 normalization stage walks the source tree and reports evidence' );
+    dc_assert( 4 === (int) ( $figma_ir['diagnostics']['figma_adapter_version'] ?? 0 ), 'Figma v4 IR diagnostics report the adapter version' );
+    dc_assert( isset( $figma_ir['diagnostics']['normalization'] ) && 2 === (int) ( $figma_ir['diagnostics']['normalization']['nodes'] ?? 0 ), 'Figma v4 normalization stage walks the source tree and reports evidence' );
 }
-dc_assert( true === ( $root_node['layout_governance']['fixed_width_exception'] ?? false ), 'Figma authored FIXED width governance is preserved through v3 normalization' );
+dc_assert( true === ( $image_node['layout_governance']['fixed_width_exception'] ?? false ), 'Figma authored FIXED width governance is preserved through v4 normalization' );
 dc_assert( 'https://cdn.example.test/figma-image.png' === ( $image_node['assets']['images'][0]['resolved_url'] ?? '' ), 'Figma imageRef resolves through transport evidence' );
 dc_assert( 'component:1' === ( $image_node['figma']['component_id'] ?? '' ), 'Figma component instance identity is preserved' );
 

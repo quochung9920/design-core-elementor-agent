@@ -66,7 +66,7 @@ class Design_Core_Elementor_Design_Brief {
             'reference_target'=>isset($options['reference_target']) ? esc_url_raw((string)$options['reference_target']) : '',
             'constraints'=>array(
                 'language'=>sanitize_key( (string) ( $options['language'] ?? 'en' ) ),
-                'mode'=>in_array(($options['mode']??'light'),array('light','dark'),true)?$options['mode']:'light',
+                'mode'=>in_array(($options['mode']??'light'),array('light','dark'),true)?($options['mode']??'light'):'light',
                 'mobile_first'=>true,
                 'accessibility'=>'wcag-aa',
                 'native_elementor_preferred'=>true,

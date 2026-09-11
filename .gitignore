@@ -31,3 +31,6 @@ temp/
 # OS files
 Thumbs.db
 .DS_Store
+
+# Local CI runtime artifacts
+.artifacts/

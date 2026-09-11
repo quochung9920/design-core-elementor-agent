@@ -1,4 +1,7 @@
 name: Production CI
+# NOTE: Local CI (./scripts/ci-local.sh, docs/local-ci.md) is the primary
+# developer validation workflow. This file mirrors the same entrypoints so
+# the two never drift into unrelated copies of test commands.
 on:
   push:
     branches: [main]
@@ -15,19 +18,11 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with: { php-version: '${{ matrix.php }}' }
       - run: composer install --no-interaction --prefer-dist --no-progress
-      - name: PHP syntax
-        run: find . -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l
-      - name: Core contracts
+      - name: PHP syntax (same as ci-local.sh)
+        run: find . -name '*.php' -not -path './vendor/*' -not -path './node_modules/*' -print0 | xargs -0 -n1 php -l
+      - name: Core contracts (same list as scripts/ci-local.sh)
         run: |
-          php tests/architecture/run.php
-          php tests/registry/run.php
-          php tests/native-fidelity/run.php
-          php tests/strict-native/run.php
-          php tests/responsive-compiler/run.php
-          php tests/design-intelligence/run.php
-          php tests/design-brain/run.php
-          php tests/rc19-intelligence/run.php
-          php tests/rc20-fidelity/run.php
+          for t in architecture registry native-fidelity strict-native responsive-compiler design-intelligence design-brain rc19-intelligence rc20-fidelity reference-integration fixed-width-governance pawcare-benchmark; do php tests/$t/run.php; done
           php tests/figma-fidelity/run.php
           php tests/figma-fidelity/adapter.php
   browser-qa:
@@ -39,11 +34,11 @@ jobs:
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
       - run: npm run check
-      - name: Multi-viewport evidence
+      - name: Multi-viewport evidence (same as ci-local.sh)
         run: |
           node scripts/browser-analyze-target.mjs "$GITHUB_WORKSPACE/tests/fixtures/benchmark-hero-split.html" 1440,1024,768,390 > /tmp/target.json
-          node -e "const x=require('/tmp/target.json'); if(!x.viewports || !x.viewports['390'] || !x.viewports['1440']) process.exit(1)"
-      - name: Screenshot comparison
+          node -e "const x=require('/tmp/target.json'); for (const w of ['1440','1024','768','390']) { if(!x.viewports || !x.viewports[w] || !x.viewports[w].length) process.exit(1) }"
+      - name: Screenshot comparison (same as ci-local.sh)
         run: |
           node scripts/capture-page.mjs "$GITHUB_WORKSPACE/tests/fixtures/marketing.html" 390 /tmp/ref.png
           node scripts/capture-page.mjs "$GITHUB_WORKSPACE/tests/fixtures/marketing.html" 390 /tmp/cand.png

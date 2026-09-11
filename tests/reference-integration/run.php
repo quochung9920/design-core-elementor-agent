@@ -125,7 +125,7 @@ dc_assert( ! empty( $badge['_design_core_warnings'] ), 'Target-dependent Figma f
 
 $ir = ( new Design_Core_Elementor_Figma_Design_IR_Adapter() )->convert( array( 'document'=>$figma ) );
 dc_assert( ! is_wp_error( $ir ), 'Normalized synthetic Figma selection validates as Design IR v4.' );
-dc_assert( 3 === (int) ( $ir['diagnostics']['figma_adapter_version'] ?? 0 ), 'Figma adapter v3 is reported in IR diagnostics.' );
+dc_assert( 4 === (int) ( $ir['diagnostics']['figma_adapter_version'] ?? 0 ), 'Figma adapter v4 is reported in IR diagnostics.' );
 dc_assert( 1 <= (int) ( $ir['diagnostics']['normalization']['warning_count'] ?? 0 ), 'Figma normalization diagnostics retain target-fidelity warnings.' );
 $ir_badge = null;
 foreach ( (array) ( $ir['nodes'] ?? array() ) as $ir_node ) { if ( 'badge' === strtolower( (string) ( $ir_node['figma']['name'] ?? '' ) ) ) { $ir_badge = $ir_node; break; } }

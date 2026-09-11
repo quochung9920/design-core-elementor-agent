@@ -379,7 +379,7 @@ class Design_Core_Elementor_Figma_Design_IR_Adapter {
         if ( 'ELLIPSE' === $type ) { $style['css_fallback']['border-radius'] = '50%'; }
 
         foreach ( (array) ( $figma['strokes'] ?? array() ) as $stroke ) {
-            if ( ! is_array( $stroke ) || false === ( $stroke['visible'] ?? true ) || 'SOLID' !== strtoupper( (string) ( $stroke['type'] ?? '' ) ) { continue; }
+            if ( ! is_array( $stroke ) || false === ( $stroke['visible'] ?? true ) || 'SOLID' !== strtoupper( (string) ( $stroke['type'] ?? '' ) ) ) { continue; }
             $style['border_style'] = 'solid';
             $style['border_color'] = $this->rgba( (array) ( $stroke['color'] ?? array() ), (float) ( $stroke['opacity'] ?? 1 ) );
             $weight = is_numeric( $figma['strokeWeight'] ?? null ) ? (float) $figma['strokeWeight'] : 1.0;

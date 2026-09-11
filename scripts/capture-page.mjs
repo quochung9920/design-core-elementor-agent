@@ -14,7 +14,7 @@ if (!target || !output) { console.error('Usage: capture-page.mjs target width ou
 const isRemote = /^https?:\/\//i.test(target);
 const targetUrl = isRemote ? new URL(target) : pathToFileURL(target);
 const browser = await chromium.launch({ headless: true });
-const context = await browser.newContext({ viewport: { width, height: 1200 }, deviceScaleFactor: 1, javaScriptEnabled: isRemote });
+const context = await browser.newContext({ viewport: { width, height: 1200 }, deviceScaleFactor: 1, javaScriptEnabled: true });
 
 if (isRemote) {
   const allowedOrigin = targetUrl.origin.toLowerCase();
@@ -53,4 +53,4 @@ if (selector) {
 }
 await context.close(); await browser.close();
 if (!fs.existsSync(output)) process.exit(3);
-console.log(JSON.stringify({ output, width, selector, box, javascript_enabled: isRemote, network_policy: isRemote ? 'same-origin-plus-explicit-static-assets' : 'blocked', target_origin: isRemote ? targetUrl.origin : '', horizontal_overflow: overflow }));
+console.log(JSON.stringify({ output, width, selector, box, javascript_enabled: true, network_policy: isRemote ? 'same-origin-plus-explicit-static-assets' : 'blocked', target_origin: isRemote ? targetUrl.origin : '', horizontal_overflow: overflow }));
