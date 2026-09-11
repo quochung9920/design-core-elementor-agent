@@ -64,7 +64,13 @@ final class Design_Core_Agent_Validator {
         $effective = array_replace( $effective, $values );
         foreach ( $values as $name => $value ) {
             $path = $parent . '/' . Design_Core_Agent_Contract::escape( (string) $name );
-            if ( in_array( $name, array( '__globals__', '__dynamic__', 'custom_css', 'custom_attributes' ), true ) ) {
+            // Runtime controls are authoritative: custom_css is a real persisted
+            // Elementor control when the live schema offers it (e.g. Pro is
+            // active). Only reject it when the runtime has no such control.
+            if ( 'custom_css' === $name && ! isset( $definitions['custom_css'] ) ) {
+                $this->issue( $issues, $path, 'restricted', 'The live runtime schema has no custom_css control; strict native plans do not accept this field.' ); continue;
+            }
+            if ( in_array( $name, array( '__globals__', '__dynamic__', 'custom_attributes' ), true ) ) {
                 $this->issue( $issues, $path, 'restricted', 'Requires a dedicated verified binding adapter; strict native plans do not accept this field.' ); continue;
             }
             if ( Design_Core_Agent_Contract::sensitive( (string) $name ) ) { $this->issue( $issues, $path, 'restricted', 'Credential-like fields cannot be authored through a design plan.' ); continue; }
@@ -184,8 +190,17 @@ final class Design_Core_Agent_Validator {
             $multiple = 'select2' === $type && ! empty( $definition['multiple'] );
             if ( $multiple && ( ! is_array( $value ) || ! array_is_list( $value ) ) ) { $this->issue( $issues, $path, 'type', 'Expected an array of selected values.' ); return; }
             $options = array_map( 'strval', array_keys( $option_source ) );
+            // A runtime dictionary can be a partial logical mapping (e.g. only
+            // start/end entries) while the control still interpolates {{VALUE}}
+            // directly. A closed, documented domain remains verifiable --
+            // values inside it pass, anything outside it keeps failing.
+            $leaf = preg_replace( '#^.*/([^/]+)$#', '$1', (string) $path );
+            $domain = self::documented_options_domain( $leaf );
             foreach ( $multiple ? $value : array( $value ) as $choice ) {
-                if ( ! is_scalar( $choice ) || ! in_array( (string) $choice, $options, true ) ) { $this->issue( $issues, $path, 'enum', 'Value is not a runtime option.' ); }
+                if ( ! is_scalar( $choice ) || ! in_array( (string) $choice, $options, true ) ) {
+                    if ( null !== $domain && is_scalar( $choice ) && in_array( (string) $choice, $domain, true ) ) { continue; }
+                    $this->issue( $issues, $path, 'enum', 'Value is not a runtime option.' );
+                }
             }
             return;
         }
