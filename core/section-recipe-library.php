@@ -1,85 +1,67 @@
 <?php
-if ( ! defined( 'ABSPATH' ) ) { exit; }
-
-/** Canonical reusable section recipes replacing page-specific Elementor scripts. */
-class Design_Core_Elementor_Section_Recipe_Library {
-    const VERSION = 1;
-
-    public function all() { return self::definitions(); }
-
-    public function get( $family ) {
-        $family = sanitize_key( (string) $family );
-        $all = self::definitions();
-        return $all[ $family ] ?? null;
-    }
-
-    public function compile( $family, array $bindings = array(), $root_id = '' ) {
-        $recipe = $this->get( $family );
-        if ( ! is_array( $recipe ) ) { return new WP_Error( 'design_core_recipe_not_found', 'Unknown section recipe: ' . sanitize_key( $family ) ); }
-        foreach ( (array) ( $recipe['slots'] ?? array() ) as $slot_name => $slot ) {
-            if ( ! is_array( $slot ) || empty( $slot['required'] ) || array_key_exists( 'default', $slot ) ) { continue; }
-            if ( ! array_key_exists( $slot_name, $bindings ) || null === $bindings[ $slot_name ] || '' === $bindings[ $slot_name ] || array() === $bindings[ $slot_name ] ) {
-                return new WP_Error( 'design_core_recipe_binding_missing', 'Required binding is missing for ' . sanitize_key( $family ) . '.' . sanitize_key( $slot_name ) . '.' );
-            }
-        }
-        try { return ( new Design_Core_Elementor_Section_Recipe_Compiler() )->compile( $recipe, $bindings, $root_id ); }
-        catch ( Throwable $exception ) { return new WP_Error( 'design_core_recipe_compile_failed', $exception->getMessage() ); }
-    }
-
-    public static function definitions() {
-        return array(
-            'hero-split' => array(
-                'family' => 'hero', 'tag' => 'section', 'classes' => array( 'dc-section-hero', 'dc-layout-split' ),
-                'layout' => array( 'display' => 'flex', 'direction' => 'row', 'gap' => array( 'value' => 40, 'unit' => 'px' ), 'max_width' => array( 'value' => 1280, 'unit' => 'px' ) ),
-                'responsive' => array( 'mobile' => array( 'layout' => array( 'direction' => 'column', 'gap' => array( 'value' => 24, 'unit' => 'px' ) ) ) ),
-                'slots' => array(
-                    'eyebrow' => array( 'type' => 'text' ),
-                    'heading' => array( 'type' => 'heading', 'tag' => 'h1', 'required' => true ),
-                    'description' => array( 'type' => 'rich_text' ),
-                    'primary_cta' => array( 'type' => 'link' ),
-                    'secondary_cta' => array( 'type' => 'link' ),
-                    'media' => array( 'type' => 'media' ),
-                ),
-            ),
-            'intro' => array(
-                'family' => 'intro', 'tag' => 'section', 'classes' => array( 'dc-section-intro' ),
-                'layout' => array( 'display' => 'flex', 'direction' => 'column', 'gap' => array( 'value' => 20, 'unit' => 'px' ), 'max_width' => array( 'value' => 960, 'unit' => 'px' ) ),
-                'slots' => array( 'eyebrow' => array( 'type' => 'text' ), 'heading' => array( 'type' => 'heading', 'required' => true ), 'description' => array( 'type' => 'rich_text' ) ),
-            ),
-            'benefits-grid' => array(
-                'family' => 'benefits', 'tag' => 'section', 'classes' => array( 'dc-section-benefits' ),
-                'layout' => array( 'display' => 'grid', 'columns' => 3, 'gap' => array( 'value' => 24, 'unit' => 'px' ), 'max_width' => array( 'value' => 1280, 'unit' => 'px' ) ),
-                'responsive' => array( 'tablet' => array( 'layout' => array( 'columns' => 2 ) ), 'mobile' => array( 'layout' => array( 'columns' => 1 ) ) ),
-                'slots' => array( 'heading' => array( 'type' => 'heading' ), 'description' => array( 'type' => 'rich_text' ), 'items' => array( 'type' => 'list', 'required' => true ) ),
-            ),
-            'comparison' => array(
-                'family' => 'comparison', 'tag' => 'section', 'classes' => array( 'dc-section-comparison' ),
-                'layout' => array( 'display' => 'flex', 'direction' => 'column', 'gap' => array( 'value' => 28, 'unit' => 'px' ), 'max_width' => array( 'value' => 1280, 'unit' => 'px' ) ),
-                'slots' => array( 'heading' => array( 'type' => 'heading', 'required' => true ), 'description' => array( 'type' => 'rich_text' ), 'rows' => array( 'type' => 'list', 'required' => true ), 'primary_cta' => array( 'type' => 'link' ) ),
-            ),
-            'calculator' => array(
-                'family' => 'pricing-calculator', 'tag' => 'section', 'classes' => array( 'dc-section-calculator' ),
-                'layout' => array( 'display' => 'flex', 'direction' => 'column', 'gap' => array( 'value' => 24, 'unit' => 'px' ), 'max_width' => array( 'value' => 1120, 'unit' => 'px' ) ),
-                'interaction' => array( 'behavior' => array( 'pattern' => 'calculator', 'confidence' => 1.0 ) ),
-                'slots' => array( 'heading' => array( 'type' => 'heading', 'required' => true ), 'description' => array( 'type' => 'rich_text' ), 'fields' => array( 'type' => 'form', 'required' => true ), 'primary_cta' => array( 'type' => 'link' ) ),
-            ),
-            'process-timeline' => array(
-                'family' => 'process', 'tag' => 'section', 'classes' => array( 'dc-section-process' ),
-                'layout' => array( 'display' => 'flex', 'direction' => 'column', 'gap' => array( 'value' => 24, 'unit' => 'px' ), 'max_width' => array( 'value' => 1180, 'unit' => 'px' ) ),
-                'slots' => array( 'heading' => array( 'type' => 'heading', 'required' => true ), 'description' => array( 'type' => 'rich_text' ), 'steps' => array( 'type' => 'list', 'required' => true ) ),
-            ),
-            'enquiry-cta' => array(
-                'family' => 'cta', 'tag' => 'section', 'classes' => array( 'dc-section-cta' ),
-                'layout' => array( 'display' => 'flex', 'direction' => 'row', 'gap' => array( 'value' => 32, 'unit' => 'px' ), 'max_width' => array( 'value' => 1280, 'unit' => 'px' ) ),
-                'responsive' => array( 'mobile' => array( 'layout' => array( 'direction' => 'column' ) ) ),
-                'slots' => array( 'heading' => array( 'type' => 'heading', 'required' => true ), 'description' => array( 'type' => 'rich_text' ), 'primary_cta' => array( 'type' => 'link', 'required' => true ), 'media' => array( 'type' => 'media' ) ),
-            ),
-            'location-service' => array(
-                'family' => 'location-services', 'tag' => 'section', 'classes' => array( 'dc-section-location-services' ),
-                'layout' => array( 'display' => 'grid', 'columns' => 2, 'gap' => array( 'value' => 28, 'unit' => 'px' ), 'max_width' => array( 'value' => 1280, 'unit' => 'px' ) ),
-                'responsive' => array( 'mobile' => array( 'layout' => array( 'columns' => 1 ) ) ),
-                'slots' => array( 'heading' => array( 'type' => 'heading', 'required' => true ), 'description' => array( 'type' => 'rich_text' ), 'services' => array( 'type' => 'list', 'required' => true ), 'primary_cta' => array( 'type' => 'link' ) ),
-            ),
-        );
-    }
-}
+if(!defined('ABSPATH')){exit;}
+/** Canonical reusable section recipes for real-world site composition. */
+class Design_Core_Elementor_Section_Recipe_Library{const VERSION=1;const LIBRARY_VERSION=2;public function all(){return self::definitions();}public function get($id){$a=self::definitions();return $a[sanitize_key((string)$id)]??null;}public function compile($id,array $bindings=array(),$root_id=''){$r=$this->get($id);if(!is_array($r))return new WP_Error('design_core_recipe_not_found','Unknown section recipe: '.sanitize_key($id));foreach((array)($r['slots']??array()) as $name=>$slot){if(!empty($slot['required'])&&!array_key_exists('default',$slot)&&(!array_key_exists($name,$bindings)||null===$bindings[$name]||''===$bindings[$name]||array()===$bindings[$name]))return new WP_Error('design_core_recipe_binding_missing','Required binding is missing for '.sanitize_key($id).'.'.sanitize_key($name).'.');}try{return(new Design_Core_Elementor_Section_Recipe_Compiler())->compile($r,$bindings,$root_id);}catch(Throwable $e){return new WP_Error('design_core_recipe_compile_failed',$e->getMessage());}}
+public static function definitions(){$r=array();$r['hero-split']=self::make('hero','flex','heading!,description,primary_cta,secondary_cta,media','row',2,40);$r['intro']=self::make('intro','flex','eyebrow,heading!,description','column',1,20);$r['benefits-grid']=self::make('benefits','grid','heading,description,items!',null,3,24);$r['comparison']=self::make('comparison','flex','heading!,description,rows!,primary_cta','column',1,28);$r['calculator']=self::make('pricing-calculator','flex','heading!,description,fields!,primary_cta','column',1,24,'calculator');$r['process-timeline']=self::make('process','flex','heading!,description,steps!','column',1,24);$r['enquiry-cta']=self::make('cta','flex','heading!,description,primary_cta!,media','row',2,32);$r['location-service']=self::make('location-services','grid','heading!,description,services!,primary_cta',null,2,28);
+$specs=array(
+'hero-centered|hero|flex|eyebrow,heading!,description,primary_cta,secondary_cta,trust|column|1|20|',
+'hero-media|hero|flex|heading!,description,media!,primary_cta,secondary_cta|column|1|28|',
+'hero-search|hero-search|flex|heading!,description,fields!,suggestions|column|1|20|search-filter',
+'hero-booking|hero-booking|grid|heading!,description,fields!,media,emergency_cta||2|40|booking',
+'hero-product|hero-product|grid|heading!,description,media!,primary_cta!,proof||2|36|',
+'hero-editorial|hero-editorial|grid|eyebrow,heading!,description,media!||2|48|',
+'trust-bar|trust|flex|items!|row|4|24|',
+'logo-cloud|logo-cloud|grid|heading,items!||6|24|',
+'stats|stats|grid|heading,items!||4|20|',
+'awards|awards|grid|heading,items!||4|20|',
+'feature-grid|features|grid|eyebrow,heading!,description,items!||3|24|',
+'feature-list|features|grid|heading!,description,items!,media||2|40|',
+'feature-tabs|feature-tabs|flex|heading!,tabs!|column|1|24|tabs',
+'service-grid|services|grid|heading!,description,services!,primary_cta||3|24|',
+'service-directory|service-directory|flex|heading!,filters,services!|column|1|28|filterable-list',
+'service-detail|service-detail|grid|heading!,description,details!,media,primary_cta||2|40|',
+'capabilities-grid|capabilities|grid|heading!,items!||3|24|',
+'team-grid|team|grid|heading!,description,people!||4|24|',
+'team-directory|team-directory|flex|heading!,filters,people!|column|1|28|filterable-directory',
+'profile-hero|profile|grid|heading!,subtitle,bio,media!,facts,primary_cta||2|40|',
+'credentials|credentials|grid|heading,items!||3|20|',
+'testimonial-grid|testimonials|grid|heading!,items!||3|24|',
+'testimonial-slider|testimonials|flex|heading,items!|column|1|24|carousel',
+'case-study-grid|case-studies|grid|heading!,items!||3|24|',
+'project-grid|projects|grid|heading!,items!||2|32|',
+'blog-grid|articles|grid|heading!,categories,items!||3|28|',
+'article-content|article|flex|heading!,meta,body!,related|column|1|24|',
+'newsletter|newsletter|flex|heading!,description,fields!|column|1|16|form',
+'pricing-grid|pricing|grid|heading!,description,plans!||3|24|',
+'pricing-comparison|pricing-comparison|flex|heading!,plans!,rows!|column|1|24|',
+'care-plans|care-plans|grid|heading!,plans!,primary_cta||3|24|',
+'faq|faq|flex|heading!,items!|column|1|12|accordion',
+'gallery|gallery|grid|heading,items!||3|16|gallery',
+'facilities|facilities|grid|heading!,description,items!||3|24|',
+'before-after|before-after|grid|heading,items!||2|20|',
+'appointment-form|appointment|grid|heading!,description,fields!,summary||2|36|multi-step-form',
+'reservation-form|reservation|grid|heading!,description,fields!,details||2|36|reservation-form',
+'contact-form|contact|grid|heading!,details,fields!||2|40|form',
+'emergency-panel|emergency|grid|heading!,description,symptoms!,primary_cta!,secondary_cta||2|32|',
+'cta-banner|cta|flex|heading!,description,primary_cta!,secondary_cta|row|2|24|',
+'cta-split|cta|grid|heading!,description,primary_cta!,media||2|40|',
+'product-grid|products|grid|heading!,filters,items!||4|24|catalog',
+'category-grid|categories|grid|heading,items!||4|20|',
+'property-search|property-search|flex|heading!,fields!|column|1|16|search-filter',
+'property-grid|properties|grid|heading!,filters,items!||3|24|catalog',
+'room-grid|rooms|grid|heading!,items!||3|28|',
+'menu-grid|menu|grid|heading!,categories,items!||2|24|',
+'course-grid|courses|grid|heading!,filters,items!||3|24|catalog',
+'event-grid|events|grid|heading!,items!||3|24|',
+'location-map|locations|grid|heading!,locations!,media||2|36|',
+'portal-summary|portal|grid|heading!,items!,primary_cta||3|20|',
+'proof-grid|proof|grid|heading,items!||3|20|',
+'icon-list|icon-list|grid|heading,items!||2|18|',
+'media-text|media-text|grid|heading!,description,media!||2|36|',
+'split-content|split-content|grid|heading!,left!,right!||2|32|',
+'quote-panel|quote|flex|quote!,author|column|1|16|',
+'video-section|video|flex|heading,description,media!|column|1|24|video',
+'comparison-table|comparison-table|flex|heading!,rows!|column|1|20|table',
+'jump-navigation|jump-navigation|flex|items!|row|5|12|navigation'
+);foreach($specs as $s){$p=explode('|',$s);$r[$p[0]]=self::make($p[1],$p[2],$p[3],$p[4]?:null,(int)$p[5],(int)$p[6],$p[7]);}return $r;}
+private static function make($family,$display,$slot_csv,$direction=null,$columns=1,$gap=24,$pattern=''){$slots=array();foreach(explode(',',$slot_csv) as $token){$token=trim($token);if(!$token)continue;$req=str_ends_with($token,'!');$name=rtrim($token,'!');$type='rich_text';if(in_array($name,array('heading'),true))$type='heading';elseif(in_array($name,array('media'),true))$type='media';elseif(in_array($name,array('primary_cta','secondary_cta','emergency_cta'),true))$type='link';elseif(in_array($name,array('fields'),true))$type='form';elseif(in_array($name,array('items','services','people','plans','rows','steps','filters','categories','locations','facts','trust','tabs','details','symptoms','suggestions','related','summary','proof','left','right'),true))$type='list';elseif(in_array($name,array('eyebrow','subtitle','meta','author'),true))$type='text';$slots[$name]=array('type'=>$type);if($req)$slots[$name]['required']=true;if('heading'===$name&&'hero'===$family)$slots[$name]['tag']='h1';}$layout=array('display'=>$display,'gap'=>array('value'=>$gap,'unit'=>'px'),'max_width'=>array('value'=>1280,'unit'=>'px'));if($direction)$layout['direction']=$direction;if('grid'===$display)$layout['columns']=max(1,$columns);$out=array('family'=>$family,'tag'=>'section','classes'=>array('dc-section-'.sanitize_key($family)),'layout'=>$layout,'responsive'=>array('tablet'=>array('layout'=>array('columns'=>'grid'===$display?min(2,max(1,$columns)):$columns)),'mobile'=>array('layout'=>array('columns'=>1,'direction'=>'column','gap'=>array('value'=>20,'unit'=>'px')))),'slots'=>$slots);if($pattern)$out['interaction']=array('behavior'=>array('pattern'=>$pattern,'confidence'=>.9));return $out;}}

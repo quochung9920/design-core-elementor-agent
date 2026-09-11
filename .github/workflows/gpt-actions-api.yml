@@ -1,54 +1,17 @@
-name: GPT Actions Owner API
-
+name: Agent API compatibility
 on:
   push:
     branches: [main]
-    paths:
-      - 'core/api-access-settings.php'
-      - 'core/api-credential-registry.php'
-      - 'core/api-credential-auth.php'
-      - 'core/wordpress-owner-service.php'
-      - 'core/gpt-actions-api.php'
-      - 'core/gpt-actions-rest-controller.php'
-      - 'includes/class-api-access-admin.php'
-      - 'design-core-elementor.php'
-      - 'tests/gpt-actions-api/**'
-      - '.github/workflows/gpt-actions-api.yml'
+    paths: ['core/**','design-core-elementor.php','tests/agent-contract/**','tests/design-brain/**']
   pull_request:
-    paths:
-      - 'core/api-access-settings.php'
-      - 'core/api-credential-registry.php'
-      - 'core/api-credential-auth.php'
-      - 'core/wordpress-owner-service.php'
-      - 'core/gpt-actions-api.php'
-      - 'core/gpt-actions-rest-controller.php'
-      - 'includes/class-api-access-admin.php'
-      - 'design-core-elementor.php'
-      - 'tests/gpt-actions-api/**'
-      - '.github/workflows/gpt-actions-api.yml'
-  workflow_dispatch:
-
+    paths: ['core/**','design-core-elementor.php','tests/agent-contract/**','tests/design-brain/**']
 jobs:
-  owner-api-contract:
-    strategy:
-      fail-fast: false
-      matrix:
-        php: ['8.1', '8.3']
+  local-contract:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
-        with:
-          php-version: ${{ matrix.php }}
-      - name: Lint owner API files
-        run: |
-          php -l core/api-access-settings.php
-          php -l core/api-credential-registry.php
-          php -l core/api-credential-auth.php
-          php -l core/wordpress-owner-service.php
-          php -l core/gpt-actions-api.php
-          php -l core/gpt-actions-rest-controller.php
-          php -l includes/class-api-access-admin.php
-          php -l design-core-elementor.php
-      - name: Owner API contract tests
-        run: php tests/gpt-actions-api/run.php
+        with: { php-version: '8.2', coverage: none }
+      - run: php tests/agent-contract/run.php
+      - run: php tests/design-brain/run.php
+      - run: php tools/export-agent-contract.php --check

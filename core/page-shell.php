@@ -1,68 +1,52 @@
 <?php
-if ( ! defined( 'ABSPATH' ) ) { exit; }
-
-/** Platform-neutral ordered page composition built from Section Recipes. */
-class Design_Core_Elementor_Page_Shell {
-    const SCHEMA_VERSION = 1;
-
-    public function all() { return self::definitions(); }
-    public function get( $shell_id ) { $all = self::definitions(); return $all[ sanitize_key( (string) $shell_id ) ] ?? null; }
-
-    public function compile( $shell_id, array $bindings = array() ) {
-        $shell_id = sanitize_key( (string) $shell_id );
-        $shell = $this->get( $shell_id );
-        if ( ! is_array( $shell ) ) { return new WP_Error( 'design_core_shell_not_found', 'Unknown page shell: ' . $shell_id ); }
-        $library = new Design_Core_Elementor_Section_Recipe_Library();
-        $nodes = array(); $roots = array(); $included = array(); $index = 0;
-        foreach ( (array) ( $shell['sections'] ?? array() ) as $section ) {
-            if ( ! is_array( $section ) ) { continue; }
-            $key = sanitize_key( $section['key'] ?? $section['recipe'] ?? 'section-' . $index );
-            $recipe = sanitize_key( $section['recipe'] ?? '' );
-            $section_bindings = is_array( $bindings[ $key ] ?? null ) ? $bindings[ $key ] : array();
-            if ( empty( $section['required'] ) && ! $section_bindings ) { $index++; continue; }
-            $root_id = 'shell-' . $shell_id . '-' . $index . '-' . $key;
-            $compiled = $library->compile( $recipe, $section_bindings, $root_id );
-            if ( is_wp_error( $compiled ) ) { return $compiled; }
-            $nodes = array_merge( $nodes, (array) ( $compiled['nodes'] ?? array() ) );
-            $roots = array_merge( $roots, (array) ( $compiled['root_ids'] ?? array() ) );
-            $included[] = array( 'position' => $index, 'key' => $key, 'recipe' => $recipe, 'root_id' => $root_id );
-            $index++;
-        }
-        $ir = array(
-            'schema_version' => Design_Core_Elementor_Design_IR::SCHEMA_VERSION,
-            'type' => 'design-ir',
-            'source_name' => 'page-shell:' . $shell_id,
-            'nodes' => $nodes,
-            'root_ids' => $roots,
-            'analysis_quality' => array( 'browser_runtime' => 'shell', 'computed_styles' => 'shell', 'geometry' => 'shell', 'css_static' => 'shell', 'interaction' => 'shell' ),
-            'tokens' => array(), 'breakpoints' => array(),
-            'diagnostics' => array( 'page_shell' => array( 'schema_version' => self::SCHEMA_VERSION, 'id' => $shell_id, 'sections' => $included ) ),
-        );
-        try {
-            ( new Design_Core_Elementor_Design_IR_Validator() )->validate( $ir );
-            $ir = ( new Design_Core_Elementor_Normalization_Pipeline() )->normalize( $ir );
-            ( new Design_Core_Elementor_Design_IR_Validator() )->validate( $ir );
-        } catch ( Throwable $exception ) { return new WP_Error( 'design_core_shell_compile_failed', $exception->getMessage() ); }
-        return $ir;
-    }
-
-    public static function definitions() {
-        return array(
-            'service-landing' => array( 'label' => 'Service landing', 'sections' => array(
-                array( 'key' => 'hero', 'recipe' => 'hero-split', 'required' => true ), array( 'key' => 'intro', 'recipe' => 'intro', 'required' => true ), array( 'key' => 'benefits', 'recipe' => 'benefits-grid', 'required' => true ), array( 'key' => 'comparison', 'recipe' => 'comparison', 'required' => false ), array( 'key' => 'process', 'recipe' => 'process-timeline', 'required' => true ), array( 'key' => 'cta', 'recipe' => 'enquiry-cta', 'required' => true ),
-            ) ),
-            'location-landing' => array( 'label' => 'Location landing', 'sections' => array(
-                array( 'key' => 'hero', 'recipe' => 'hero-split', 'required' => true ), array( 'key' => 'intro', 'recipe' => 'intro', 'required' => true ), array( 'key' => 'services', 'recipe' => 'location-service', 'required' => true ), array( 'key' => 'benefits', 'recipe' => 'benefits-grid', 'required' => false ), array( 'key' => 'process', 'recipe' => 'process-timeline', 'required' => false ), array( 'key' => 'cta', 'recipe' => 'enquiry-cta', 'required' => true ),
-            ) ),
-            'resource-article' => array( 'label' => 'Resource / article', 'sections' => array(
-                array( 'key' => 'hero', 'recipe' => 'hero-split', 'required' => true ), array( 'key' => 'intro', 'recipe' => 'intro', 'required' => true ), array( 'key' => 'cta', 'recipe' => 'enquiry-cta', 'required' => false ),
-            ) ),
-            'import-guide' => array( 'label' => 'Import guide', 'sections' => array(
-                array( 'key' => 'hero', 'recipe' => 'hero-split', 'required' => true ), array( 'key' => 'intro', 'recipe' => 'intro', 'required' => true ), array( 'key' => 'process', 'recipe' => 'process-timeline', 'required' => true ), array( 'key' => 'comparison', 'recipe' => 'comparison', 'required' => false ), array( 'key' => 'cta', 'recipe' => 'enquiry-cta', 'required' => true ),
-            ) ),
-            'contact-about' => array( 'label' => 'Contact / about', 'sections' => array(
-                array( 'key' => 'hero', 'recipe' => 'hero-split', 'required' => true ), array( 'key' => 'intro', 'recipe' => 'intro', 'required' => true ), array( 'key' => 'benefits', 'recipe' => 'benefits-grid', 'required' => false ), array( 'key' => 'cta', 'recipe' => 'enquiry-cta', 'required' => true ),
-            ) ),
-        );
-    }
-}
+if(!defined('ABSPATH')){exit;}
+/** Ordered page composition built from Section Recipes. */
+class Design_Core_Elementor_Page_Shell{const SCHEMA_VERSION=1;const LIBRARY_VERSION=2;public function all(){return self::definitions();}public function get($id){$a=self::definitions();return $a[sanitize_key((string)$id)]??null;}public function compile($id,array $bindings=array()){$id=sanitize_key((string)$id);$shell=$this->get($id);if(!is_array($shell))return new WP_Error('design_core_shell_not_found','Unknown page shell: '.$id);$lib=new Design_Core_Elementor_Section_Recipe_Library();$nodes=$roots=$included=array();$i=0;foreach((array)$shell['sections'] as $s){$key=sanitize_key($s['key']??$s['recipe']??'section-'.$i);$recipe=sanitize_key($s['recipe']??'');$b=is_array($bindings[$key]??null)?$bindings[$key]:array();if(empty($s['required'])&&!$b){$i++;continue;}$root='shell-'.$id.'-'.$i.'-'.$key;$x=$lib->compile($recipe,$b,$root);if(is_wp_error($x))return $x;$nodes=array_merge($nodes,(array)($x['nodes']??array()));$roots=array_merge($roots,(array)($x['root_ids']??array()));$included[]=array('position'=>$i,'key'=>$key,'recipe'=>$recipe,'root_id'=>$root);$i++;}$ir=array('schema_version'=>Design_Core_Elementor_Design_IR::SCHEMA_VERSION,'type'=>'design-ir','source_name'=>'page-shell:'.$id,'nodes'=>$nodes,'root_ids'=>$roots,'analysis_quality'=>array('browser_runtime'=>'shell','computed_styles'=>'shell','geometry'=>'shell','css_static'=>'shell','interaction'=>'shell'),'tokens'=>array(),'breakpoints'=>array(),'diagnostics'=>array('page_shell'=>array('schema_version'=>self::SCHEMA_VERSION,'library_version'=>self::LIBRARY_VERSION,'id'=>$id,'sections'=>$included)));try{(new Design_Core_Elementor_Design_IR_Validator())->validate($ir);$ir=(new Design_Core_Elementor_Normalization_Pipeline())->normalize($ir);(new Design_Core_Elementor_Design_IR_Validator())->validate($ir);}catch(Throwable $e){return new WP_Error('design_core_shell_compile_failed',$e->getMessage());}return $ir;}
+public static function definitions(){$specs=array(
+'service-landing|Service landing|hero:hero-split!,intro:intro!,benefits:benefits-grid!,comparison:comparison,process:process-timeline!,cta:enquiry-cta!',
+'location-landing|Location landing|hero:hero-split!,intro:intro!,services:location-service!,benefits:benefits-grid,process:process-timeline,cta:enquiry-cta!',
+'resource-article|Resource / article|hero:hero-split!,intro:intro!,cta:enquiry-cta',
+'import-guide|Import guide|hero:hero-split!,intro:intro!,process:process-timeline!,comparison:comparison,cta:enquiry-cta!',
+'contact-about|Contact / about|hero:hero-split!,intro:intro!,benefits:benefits-grid,cta:enquiry-cta!',
+'marketing-home|Marketing home|hero:hero-centered!,trust:trust-bar,features:feature-grid!,proof:testimonial-grid,resources:blog-grid,cta:cta-banner!',
+'service-home|Service business home|hero:hero-split!,trust:trust-bar,services:service-grid!,proof:case-study-grid,process:process-timeline,testimonials:testimonial-grid,faq:faq,cta:cta-banner!',
+'service-index|Service index|hero:hero-centered!,services:service-directory!,proof:trust-bar,faq:faq,cta:cta-banner!',
+'service-detail|Service detail|hero:hero-split!,detail:service-detail!,process:process-timeline,proof:testimonial-grid,faq:faq,cta:cta-banner!',
+'about|About|hero:hero-editorial!,intro:intro!,stats:stats,team:team-grid,values:feature-grid,proof:awards,cta:cta-banner',
+'contact|Contact|hero:hero-centered!,contact:contact-form!,locations:location-map,faq:faq',
+'pricing|Pricing|hero:hero-centered!,pricing:pricing-grid!,comparison:pricing-comparison,faq:faq,cta:cta-banner!',
+'medical-home|Medical home|hero:hero-booking!,trust:trust-bar,services:service-grid!,team:team-grid,facilities:facilities,testimonials:testimonial-grid,faq:faq,cta:cta-banner!',
+'veterinary-home|Veterinary home|hero:hero-booking!,emergency:emergency-panel,trust:trust-bar,services:service-grid!,team:team-grid,facilities:facilities,plans:care-plans,testimonials:testimonial-grid,resources:blog-grid,faq:faq,cta:cta-banner!',
+'team-directory|Team directory|hero:hero-centered!,directory:team-directory!,credentials:trust-bar,cta:cta-banner',
+'profile-detail|Professional profile|profile:profile-hero!,credentials:credentials,services:service-grid,testimonials:testimonial-grid,cta:cta-banner!',
+'appointment-booking|Appointment booking|hero:hero-centered!,booking:appointment-form!,preparation:feature-list,faq:faq',
+'emergency|Emergency|emergency:emergency-panel!,process:process-timeline,locations:location-map,faq:faq',
+'care-plans|Care plans|hero:hero-centered!,plans:care-plans!,comparison:pricing-comparison,faq:faq,cta:cta-banner!',
+'facilities|Facilities / gallery|hero:hero-editorial!,facilities:facilities!,gallery:gallery,trust:trust-bar,cta:cta-banner',
+'portal-dashboard|Client portal dashboard|hero:hero-centered!,summary:portal-summary!,resources:feature-grid,cta:cta-banner',
+'ecommerce-home|Commerce home|hero:hero-product!,categories:category-grid,products:product-grid!,benefits:feature-grid,proof:testimonial-grid,cta:cta-banner',
+'shop|Shop / catalog|hero:hero-search!,categories:category-grid,products:product-grid!',
+'category|Product category|hero:hero-centered!,products:product-grid!,cta:cta-banner',
+'product-detail|Product detail|hero:hero-product!,features:feature-list,comparison:comparison,testimonials:testimonial-grid,faq:faq,cta:cta-banner',
+'saas-home|SaaS / software home|hero:hero-product!,trust:logo-cloud,features:feature-grid!,detail:feature-tabs,proof:case-study-grid,pricing:pricing-grid,faq:faq,cta:cta-banner!',
+'feature-detail|Feature detail|hero:hero-split!,detail:feature-list!,proof:case-study-grid,faq:faq,cta:cta-banner!',
+'real-estate-home|Real estate home|hero:hero-search!,search:property-search,properties:property-grid!,services:service-grid,agents:team-grid,proof:testimonial-grid,cta:cta-banner',
+'property-list|Property listing|hero:hero-centered!,search:property-search!,properties:property-grid!',
+'property-detail|Property detail|hero:hero-media!,details:feature-list!,gallery:gallery,agent:profile-hero,locations:location-map,cta:cta-banner!',
+'restaurant-home|Restaurant / cafe home|hero:hero-editorial!,menu:menu-grid!,story:feature-list,gallery:gallery,proof:testimonial-grid,reservation:reservation-form,locations:location-map',
+'menu|Menu|hero:hero-centered!,menu:menu-grid!,reservation:cta-banner',
+'reservation|Reservation|hero:hero-centered!,reservation:reservation-form!,locations:location-map,faq:faq',
+'hotel-home|Hotel / resort home|hero:hero-booking!,rooms:room-grid!,features:feature-grid,gallery:gallery,proof:testimonial-grid,locations:location-map,cta:cta-banner',
+'rooms|Rooms / stays|hero:hero-centered!,rooms:room-grid!,features:feature-grid,cta:cta-banner',
+'room-detail|Room detail|hero:hero-media!,details:feature-list!,gallery:gallery,reservation:reservation-form,faq:faq',
+'education-home|Education home|hero:hero-split!,programs:course-grid!,proof:stats,team:team-grid,testimonials:testimonial-grid,resources:blog-grid,cta:cta-banner!',
+'course-list|Course / program list|hero:hero-search!,courses:course-grid!,faq:faq,cta:cta-banner',
+'course-detail|Course / program detail|hero:hero-product!,outcomes:feature-grid!,process:process-timeline,team:profile-hero,pricing:pricing-grid,faq:faq,cta:cta-banner!',
+'blog-home|Blog / editorial home|hero:hero-editorial!,featured:blog-grid!,newsletter:newsletter',
+'archive|Content archive|hero:hero-centered!,articles:blog-grid!,newsletter:newsletter',
+'article|Article|article:article-content!,related:blog-grid,newsletter:newsletter',
+'portfolio-home|Portfolio home|hero:hero-editorial!,work:project-grid!,services:service-grid,proof:testimonial-grid,about:feature-list,cta:cta-banner!',
+'project-list|Project list|hero:hero-centered!,projects:project-grid!,cta:cta-banner',
+'project-detail|Project detail|hero:hero-media!,story:article-content!,gallery:gallery,results:stats,related:project-grid,cta:cta-banner',
+'event|Events|hero:hero-centered!,events:event-grid!,faq:faq,cta:cta-banner'
+);$d=array();foreach($specs as $line){$p=explode('|',$line);$d[$p[0]]=self::shell($p[1],explode(',',$p[2]));}return $d;}private static function shell($label,$tokens){$s=array();foreach($tokens as $token){$req=str_ends_with($token,'!');if($req)$token=substr($token,0,-1);$p=explode(':',$token,2);$s[]=array('key'=>sanitize_key($p[0]),'recipe'=>sanitize_key($p[1]??$p[0]),'required'=>$req);}return array('label'=>$label,'sections'=>$s);}}
