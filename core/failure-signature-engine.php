@@ -1,7 +1,7 @@
 <?php
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-/** Converts source/QA evidence into stable failure-pattern signatures. */
+/** Converts source/QA evidence into stable, semantic failure-pattern signatures. */
 class Design_Core_Elementor_Failure_Signature_Engine {
     const VERSION = 1;
 
@@ -26,7 +26,7 @@ class Design_Core_Elementor_Failure_Signature_Engine {
             if ( $this->is_fixed_media( $node, $sizing, $geo ) ) { $signals[] = 'figma.media.fixed-height'; }
         }
         if ( 'figma' === sanitize_key( (string) ( $ir['source_name'] ?? '' ) ) ) { $signals[] = 'figma.rendered-node.geometry'; }
-        return array_values( array_unique( array_filter( array_map( 'sanitize_key', $signals ) ) ) );
+        return array_values( array_unique( array_filter( array_map( array( 'Design_Core_Elementor_Design_Memory_Store', 'signature_key' ), $signals ) ) ) );
     }
 
     public function signature_from_issue( array $issue, array $context = array() ) {
@@ -49,7 +49,7 @@ class Design_Core_Elementor_Failure_Signature_Engine {
         if ( 'media' === $category ) { return 'figma.media.crop-position'; }
         if ( 'surface' === $category ) { return 'figma.surface.style'; }
         if ( 'render' === $category ) { return 'figma.render.failure'; }
-        return 'visual.' . ( $category ?: 'mismatch' );
+        return Design_Core_Elementor_Design_Memory_Store::signature_key( 'visual.' . ( $category ?: 'mismatch' ) );
     }
 
     public function strategy_for_signature( $signature ) {
@@ -63,7 +63,7 @@ class Design_Core_Elementor_Failure_Signature_Engine {
             'figma.media.fixed-height' => 'preserve-fixed-media-height',
             'figma.rendered-node.geometry' => 'verify-figma-node-geometry',
         );
-        return $map[ sanitize_key( (string) $signature ) ] ?? '';
+        return $map[ Design_Core_Elementor_Design_Memory_Store::signature_key( $signature ) ] ?? '';
     }
 
     public function figma_node_map( array $ir ) {
