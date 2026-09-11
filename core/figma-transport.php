@@ -4,12 +4,13 @@ if ( ! defined( 'ABSPATH' ) ) { exit; }
 /**
  * Network/auth boundary for Figma.
  *
- * v2 adds bounded rendered-reference export and exact vector export so the
- * compiler can preserve vector/icon assets and compare the Elementor result
- * against Figma's own render instead of trusting inferred geometry alone.
+ * v3 adds geometry-driven vector asset discovery. Small vector-only Figma
+ * composites and primitives are exported as one exact SVG and collapsed to a
+ * media leaf before Design IR conversion, preventing decorative frames from
+ * becoming stretchable Elementor containers.
  */
 class Design_Core_Elementor_Figma_Transport {
-    const VERSION = 2;
+    const VERSION = 3;
     const API_BASE = 'https://api.figma.com/v1';
     const MAX_RESPONSE_BYTES = 12582912;
     const MAX_VECTOR_EXPORTS = 48;
@@ -36,7 +37,7 @@ class Design_Core_Elementor_Figma_Transport {
      *
      * Options:
      * - resolve_image_fills: map IMAGE fills to temporary CDN URLs.
-     * - resolve_vector_assets: export authored vector leaf nodes as SVG.
+     * - resolve_vector_assets: export authored vector/icon nodes as SVG.
      * - export_reference: export the selected node as a Figma-rendered PNG.
      */
     public function read_url( $url, array $options = array() ) {
@@ -49,11 +50,15 @@ class Design_Core_Elementor_Figma_Transport {
         if ( is_wp_error( $image_fills ) ) { $image_fills = array(); }
 
         $vector_assets = array();
+        $vector_ids = array();
         if ( ! empty( $options['resolve_vector_assets'] ) ) {
             $vector_ids = $this->collect_vector_ids( (array) ( $payload['document'] ?? $payload ) );
             if ( $vector_ids ) {
                 $vector_assets = $this->export_nodes( $parsed['file_key'], $vector_ids, 'svg', 1 );
                 if ( is_wp_error( $vector_assets ) ) { $vector_assets = array(); }
+            }
+            if ( $vector_assets && isset( $payload['document'] ) && is_array( $payload['document'] ) ) {
+                $payload['document'] = $this->collapse_exported_vector_nodes( $payload['document'], array_keys( $vector_assets ) );
             }
         }
 
@@ -84,6 +89,11 @@ class Design_Core_Elementor_Figma_Transport {
             'image_fills' => $image_fills,
             'vector_assets' => $vector_assets,
             'reference_image' => $reference,
+            'asset_diagnostics' => array(
+                'vector_candidates' => count( $vector_ids ),
+                'vector_exports' => count( $vector_assets ),
+                'composite_vector_resolution' => class_exists( 'Design_Core_Elementor_Figma_Vector_Asset_Resolver' ) ? 'enabled' : 'legacy-leaf-only',
+            ),
         );
     }
 
@@ -138,18 +148,46 @@ class Design_Core_Elementor_Figma_Transport {
     }
 
     private function collect_vector_ids( array $root ) {
+        if ( class_exists( 'Design_Core_Elementor_Figma_Vector_Asset_Resolver' ) ) {
+            return ( new Design_Core_Elementor_Figma_Vector_Asset_Resolver() )->collect( $root, self::MAX_VECTOR_EXPORTS );
+        }
         $ids = array(); $queue = array( $root );
         while ( $queue && count( $ids ) < self::MAX_VECTOR_EXPORTS ) {
             $node = array_shift( $queue );
             if ( ! is_array( $node ) || false === ( $node['visible'] ?? true ) ) { continue; }
             $type = strtoupper( (string) ( $node['type'] ?? '' ) );
             $children = array_values( array_filter( (array) ( $node['children'] ?? array() ), 'is_array' ) );
-            if ( in_array( $type, array( 'VECTOR', 'BOOLEAN_OPERATION', 'LINE', 'STAR', 'POLYGON' ), true ) && ! $children && ! empty( $node['id'] ) ) {
-                $ids[] = sanitize_text_field( (string) $node['id'] );
-            }
+            if ( in_array( $type, array( 'VECTOR', 'BOOLEAN_OPERATION', 'LINE', 'STAR', 'POLYGON' ), true ) && ! $children && ! empty( $node['id'] ) ) { $ids[] = sanitize_text_field( (string) $node['id'] ); }
             foreach ( $children as $child ) { $queue[] = $child; }
         }
         return array_values( array_unique( $ids ) );
+    }
+
+    /**
+     * Figma has already rendered these nodes as exact SVG assets. Make the
+     * selected source nodes leaves while preserving their original ID/geometry,
+     * so the existing adapter maps them to an Elementor image rather than a
+     * hierarchy of layout containers.
+     */
+    private function collapse_exported_vector_nodes( array $root, array $exported_ids ) {
+        $lookup = array_fill_keys( array_map( 'strval', $exported_ids ), true );
+        $walk = function ( array $node ) use ( &$walk, $lookup ) {
+            $id = (string) ( $node['id'] ?? '' );
+            if ( $id && isset( $lookup[ $id ] ) ) {
+                $node['_design_core_original_type'] = (string) ( $node['type'] ?? '' );
+                $node['_design_core_exact_vector_asset'] = true;
+                $node['type'] = 'VECTOR';
+                $node['children'] = array();
+                return $node;
+            }
+            if ( isset( $node['children'] ) && is_array( $node['children'] ) ) {
+                foreach ( $node['children'] as $index => $child ) {
+                    if ( is_array( $child ) ) { $node['children'][ $index ] = $walk( $child ); }
+                }
+            }
+            return $node;
+        };
+        return $walk( $root );
     }
 
     private function request( $path ) {
