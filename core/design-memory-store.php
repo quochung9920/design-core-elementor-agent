@@ -9,7 +9,7 @@ if ( ! defined( 'ABSPATH' ) ) { exit; }
 class Design_Core_Elementor_Design_Memory_Store {
     const OPTION_KEY = 'design_core_elementor_design_memory_v1';
     const SCHEMA_VERSION = 1;
-    const SEED_VERSION = 1;
+    const SEED_VERSION = 2;
     const MAX_LESSONS = 400;
     const MAX_INCIDENTS = 600;
     const MAX_BENCHMARK_CANDIDATES = 250;
@@ -22,6 +22,14 @@ class Design_Core_Elementor_Design_Memory_Store {
     public function ensure_seeded() {
         $state = $this->snapshot();
         if ( (int) ( $state['seed_version'] ?? 0 ) >= self::SEED_VERSION ) { return $state; }
+        // An early RC24 draft used WordPress sanitize_key() for signatures, which
+        // removed semantic dots. Discard only those bundled core seeds; user/source
+        // observations are retained and can be superseded by future verified data.
+        if ( (int) ( $state['seed_version'] ?? 0 ) < 2 ) {
+            $state['lessons'] = array_values( array_filter( (array) $state['lessons'], static function ( $lesson ) {
+                return ! ( 'core-seed' === (string) ( $lesson['origin'] ?? '' ) && false === strpos( (string) ( $lesson['signature'] ?? '' ), '.' ) );
+            } ) );
+        }
         foreach ( Design_Core_Elementor_Fidelity_Rule_Registry::seed_lessons() as $lesson ) { $state = $this->upsert_lesson_into_state( $state, $lesson ); }
         $state['seed_version'] = self::SEED_VERSION;
         $state['updated_at'] = gmdate( 'c' );
@@ -50,8 +58,7 @@ class Design_Core_Elementor_Design_Memory_Store {
         $lesson = $this->sanitize_lesson( $lesson );
         if ( is_wp_error( $lesson ) ) { return $lesson; }
         $state = $this->upsert_lesson_into_state( $this->snapshot(), $lesson );
-        $state['updated_at'] = gmdate( 'c' );
-        $state['generation'] = (int) ( $state['generation'] ?? 0 ) + 1;
+        $state['updated_at'] = gmdate( 'c' ); $state['generation'] = (int) ( $state['generation'] ?? 0 ) + 1;
         if ( false === update_option( self::OPTION_KEY, $this->bounded( $state ), false ) ) { return new WP_Error( 'design_core_memory_write_failed', 'Unable to persist Design Memory lesson.' ); }
         return $this->find_lesson( $lesson['id'], $state );
     }
@@ -62,118 +69,61 @@ class Design_Core_Elementor_Design_Memory_Store {
         $state = $this->snapshot();
         $entry = array(
             'id' => 'incident-' . substr( hash( 'sha256', $signature . '|' . microtime( true ) . '|' . wp_generate_uuid4() ), 0, 20 ),
-            'signature' => $signature,
-            'scope' => $this->scope( $incident['scope'] ?? 'project' ),
-            'scope_key' => $this->scope_key( $incident['scope_key'] ?? '' ),
-            'source_kind' => sanitize_key( (string) ( $incident['source_kind'] ?? '' ) ),
-            'source_fingerprint' => $this->fingerprint( $incident['source_fingerprint'] ?? '' ),
+            'signature' => $signature, 'scope' => $this->scope( $incident['scope'] ?? 'project' ), 'scope_key' => $this->scope_key( $incident['scope_key'] ?? '' ),
+            'source_kind' => sanitize_key( (string) ( $incident['source_kind'] ?? '' ) ), 'source_fingerprint' => $this->fingerprint( $incident['source_fingerprint'] ?? '' ),
             'page_id' => max( 0, (int) ( $incident['page_id'] ?? 0 ) ),
             'status' => in_array( (string) ( $incident['status'] ?? 'open' ), array( 'open', 'resolved', 'superseded' ), true ) ? (string) $incident['status'] : 'open',
             'severity' => in_array( (string) ( $incident['severity'] ?? 'medium' ), array( 'low', 'medium', 'high', 'critical' ), true ) ? (string) $incident['severity'] : 'medium',
-            'category' => sanitize_key( (string) ( $incident['category'] ?? '' ) ),
-            'figma_id' => sanitize_text_field( (string) ( $incident['figma_id'] ?? '' ) ),
-            'elementor_id' => sanitize_key( (string) ( $incident['elementor_id'] ?? '' ) ),
-            'summary' => sanitize_text_field( (string) ( $incident['summary'] ?? '' ) ),
-            'evidence' => $this->safe_evidence( (array) ( $incident['evidence'] ?? array() ) ),
-            'created_at' => gmdate( 'c' ), 'resolved_at' => '', 'resolution' => array(),
+            'category' => sanitize_key( (string) ( $incident['category'] ?? '' ) ), 'figma_id' => sanitize_text_field( (string) ( $incident['figma_id'] ?? '' ) ),
+            'elementor_id' => sanitize_key( (string) ( $incident['elementor_id'] ?? '' ) ), 'summary' => sanitize_text_field( (string) ( $incident['summary'] ?? '' ) ),
+            'evidence' => $this->safe_evidence( (array) ( $incident['evidence'] ?? array() ) ), 'created_at' => gmdate( 'c' ), 'resolved_at' => '', 'resolution' => array(),
         );
-        array_unshift( $state['incidents'], $entry );
-        $state['updated_at'] = gmdate( 'c' ); $state['generation']++;
+        array_unshift( $state['incidents'], $entry ); $state['updated_at'] = gmdate( 'c' ); $state['generation']++;
         if ( false === update_option( self::OPTION_KEY, $this->bounded( $state ), false ) ) { return new WP_Error( 'design_core_memory_write_failed', 'Unable to persist Design Memory incident.' ); }
         return $entry;
     }
 
     public function resolve_incidents( array $incident_ids, array $resolution ) {
-        $ids = array_values( array_unique( array_filter( array_map( 'sanitize_key', $incident_ids ) ) ) );
-        if ( ! $ids ) { return 0; }
+        $ids = array_values( array_unique( array_filter( array_map( 'sanitize_key', $incident_ids ) ) ) ); if ( ! $ids ) { return 0; }
         $state = $this->snapshot(); $resolved = 0;
-        foreach ( $state['incidents'] as &$incident ) {
-            if ( ! in_array( (string) ( $incident['id'] ?? '' ), $ids, true ) ) { continue; }
-            $incident['status'] = 'resolved'; $incident['resolved_at'] = gmdate( 'c' ); $incident['resolution'] = $this->safe_evidence( $resolution ); $resolved++;
-        }
+        foreach ( $state['incidents'] as &$incident ) { if ( ! in_array( (string) ( $incident['id'] ?? '' ), $ids, true ) ) { continue; } $incident['status'] = 'resolved'; $incident['resolved_at'] = gmdate( 'c' ); $incident['resolution'] = $this->safe_evidence( $resolution ); $resolved++; }
         unset( $incident );
         if ( $resolved ) { $state['updated_at'] = gmdate( 'c' ); $state['generation']++; update_option( self::OPTION_KEY, $this->bounded( $state ), false ); }
         return $resolved;
     }
 
     public function queue_benchmark_candidate( array $candidate ) {
-        $signature = self::signature_key( $candidate['signature'] ?? '' );
-        if ( ! $signature ) { return new WP_Error( 'design_core_memory_benchmark_signature_required', 'A benchmark signature is required.' ); }
-        $strategy = sanitize_key( (string) ( $candidate['strategy'] ?? '' ) );
-        $state = $this->snapshot();
+        $signature = self::signature_key( $candidate['signature'] ?? '' ); if ( ! $signature ) { return new WP_Error( 'design_core_memory_benchmark_signature_required', 'A benchmark signature is required.' ); }
+        $strategy = sanitize_key( (string) ( $candidate['strategy'] ?? '' ) ); $state = $this->snapshot();
         $fingerprint = substr( hash( 'sha256', $signature . '|' . (string) ( $candidate['source_fingerprint'] ?? '' ) . '|' . $strategy ), 0, 24 );
         foreach ( $state['benchmark_candidates'] as &$existing ) {
             if ( (string) ( $existing['fingerprint'] ?? '' ) !== $fingerprint ) { continue; }
             $existing['verified_hits'] = (int) ( $existing['verified_hits'] ?? 0 ) + max( 1, (int) ( $candidate['verified_hits'] ?? 1 ) );
-            $existing['confidence'] = max( (float) ( $existing['confidence'] ?? 0 ), (float) ( $candidate['confidence'] ?? 0 ) );
-            $existing['last_verified_at'] = gmdate( 'c' );
-            $state['updated_at'] = gmdate( 'c' ); $state['generation']++;
-            update_option( self::OPTION_KEY, $this->bounded( $state ), false );
-            return $existing;
+            $existing['confidence'] = max( (float) ( $existing['confidence'] ?? 0 ), (float) ( $candidate['confidence'] ?? 0 ) ); $existing['last_verified_at'] = gmdate( 'c' );
+            $state['updated_at'] = gmdate( 'c' ); $state['generation']++; update_option( self::OPTION_KEY, $this->bounded( $state ), false ); return $existing;
         }
         unset( $existing );
-        $entry = array(
-            'fingerprint' => $fingerprint, 'signature' => $signature, 'strategy' => $strategy,
-            'source_kind' => sanitize_key( (string) ( $candidate['source_kind'] ?? '' ) ),
-            'source_fingerprint' => $this->fingerprint( $candidate['source_fingerprint'] ?? '' ),
-            'confidence' => max( 0, min( 1, (float) ( $candidate['confidence'] ?? 0 ) ) ),
-            'verified_hits' => max( 1, (int) ( $candidate['verified_hits'] ?? 1 ) ),
-            'status' => 'candidate', 'first_verified_at' => gmdate( 'c' ), 'last_verified_at' => gmdate( 'c' ),
-        );
-        array_unshift( $state['benchmark_candidates'], $entry );
-        $state['updated_at'] = gmdate( 'c' ); $state['generation']++;
-        update_option( self::OPTION_KEY, $this->bounded( $state ), false );
-        return $entry;
+        $entry = array( 'fingerprint' => $fingerprint, 'signature' => $signature, 'strategy' => $strategy, 'source_kind' => sanitize_key( (string) ( $candidate['source_kind'] ?? '' ) ), 'source_fingerprint' => $this->fingerprint( $candidate['source_fingerprint'] ?? '' ), 'confidence' => max( 0, min( 1, (float) ( $candidate['confidence'] ?? 0 ) ) ), 'verified_hits' => max( 1, (int) ( $candidate['verified_hits'] ?? 1 ) ), 'status' => 'candidate', 'first_verified_at' => gmdate( 'c' ), 'last_verified_at' => gmdate( 'c' ) );
+        array_unshift( $state['benchmark_candidates'], $entry ); $state['updated_at'] = gmdate( 'c' ); $state['generation']++; update_option( self::OPTION_KEY, $this->bounded( $state ), false ); return $entry;
     }
 
-    public static function signature_key( $value ) {
-        return trim( preg_replace( '/[^a-z0-9._-]+/', '', strtolower( (string) $value ) ), '.' );
-    }
-
-    public static function project_scope_key() {
-        $url = function_exists( 'home_url' ) ? (string) home_url( '/' ) : '';
-        return $url ? substr( hash( 'sha256', strtolower( rtrim( $url, '/' ) ) ), 0, 24 ) : '';
-    }
-
-    public static function source_fingerprint( array $source ) {
-        $file = sanitize_text_field( (string) ( $source['file_key'] ?? '' ) );
-        $node = sanitize_text_field( (string) ( $source['node_id'] ?? '' ) );
-        $kind = sanitize_key( (string) ( $source['kind'] ?? 'figma' ) );
-        return ( $file || $node ) ? substr( hash( 'sha256', $kind . '|' . $file . '|' . $node ), 0, 24 ) : '';
-    }
+    public static function signature_key( $value ) { return trim( preg_replace( '/[^a-z0-9._-]+/', '', strtolower( (string) $value ) ), '.' ); }
+    public static function project_scope_key() { $url = function_exists( 'home_url' ) ? (string) home_url( '/' ) : ''; return $url ? substr( hash( 'sha256', strtolower( rtrim( $url, '/' ) ) ), 0, 24 ) : ''; }
+    public static function source_fingerprint( array $source ) { $file = sanitize_text_field( (string) ( $source['file_key'] ?? '' ) ); $node = sanitize_text_field( (string) ( $source['node_id'] ?? '' ) ); $kind = sanitize_key( (string) ( $source['kind'] ?? 'figma' ) ); return ( $file || $node ) ? substr( hash( 'sha256', $kind . '|' . $file . '|' . $node ), 0, 24 ) : ''; }
 
     private function sanitize_lesson( array $lesson ) {
-        $signature = self::signature_key( $lesson['signature'] ?? '' );
-        $strategy = sanitize_key( (string) ( $lesson['strategy'] ?? '' ) );
+        $signature = self::signature_key( $lesson['signature'] ?? '' ); $strategy = sanitize_key( (string) ( $lesson['strategy'] ?? '' ) );
         if ( ! $signature || ! $strategy ) { return new WP_Error( 'design_core_memory_lesson_invalid', 'Lesson signature and strategy are required.' ); }
         if ( ! Design_Core_Elementor_Fidelity_Rule_Registry::supports_strategy( $strategy ) ) { return new WP_Error( 'design_core_memory_strategy_not_allowed', 'The lesson strategy is not in the governed Fidelity Rule Registry.' ); }
         if ( empty( $lesson['verified'] ) ) { return new WP_Error( 'design_core_memory_unverified_lesson', 'Design Memory accepts only verified lessons.' ); }
-        $scope = $this->scope( $lesson['scope'] ?? 'global' ); $scope_key = $this->scope_key( $lesson['scope_key'] ?? '' );
-        if ( 'global' !== $scope && ! $scope_key ) { return new WP_Error( 'design_core_memory_scope_key_required', 'Project/source lessons require a scope key.' ); }
+        $scope = $this->scope( $lesson['scope'] ?? 'global' ); $scope_key = $this->scope_key( $lesson['scope_key'] ?? '' ); if ( 'global' !== $scope && ! $scope_key ) { return new WP_Error( 'design_core_memory_scope_key_required', 'Project/source lessons require a scope key.' ); }
         $id = 'lesson-' . substr( hash( 'sha256', $scope . '|' . $scope_key . '|' . $signature . '|' . $strategy ), 0, 20 );
-        return array(
-            'id' => $id, 'signature' => $signature, 'strategy' => $strategy, 'scope' => $scope, 'scope_key' => $scope_key,
-            'verified' => true, 'confidence' => max( 0.5, min( 1, (float) ( $lesson['confidence'] ?? 0.8 ) ) ),
-            'verified_hits' => max( 1, (int) ( $lesson['verified_hits'] ?? 1 ) ),
-            'origin' => sanitize_key( (string) ( $lesson['origin'] ?? 'runtime' ) ), 'source_kind' => sanitize_key( (string) ( $lesson['source_kind'] ?? '' ) ),
-            'source_fingerprint' => $this->fingerprint( $lesson['source_fingerprint'] ?? '' ), 'reason' => sanitize_text_field( (string) ( $lesson['reason'] ?? '' ) ),
-            'evidence' => $this->safe_evidence( (array) ( $lesson['evidence'] ?? array() ) ),
-            'first_verified_at' => sanitize_text_field( (string) ( $lesson['first_verified_at'] ?? gmdate( 'c' ) ) ), 'last_verified_at' => gmdate( 'c' ),
-            'min_core_version' => sanitize_text_field( (string) ( $lesson['min_core_version'] ?? '' ) ),
-        );
+        return array( 'id' => $id, 'signature' => $signature, 'strategy' => $strategy, 'scope' => $scope, 'scope_key' => $scope_key, 'verified' => true, 'confidence' => max( 0.5, min( 1, (float) ( $lesson['confidence'] ?? 0.8 ) ) ), 'verified_hits' => max( 1, (int) ( $lesson['verified_hits'] ?? 1 ) ), 'origin' => sanitize_key( (string) ( $lesson['origin'] ?? 'runtime' ) ), 'source_kind' => sanitize_key( (string) ( $lesson['source_kind'] ?? '' ) ), 'source_fingerprint' => $this->fingerprint( $lesson['source_fingerprint'] ?? '' ), 'reason' => sanitize_text_field( (string) ( $lesson['reason'] ?? '' ) ), 'evidence' => $this->safe_evidence( (array) ( $lesson['evidence'] ?? array() ) ), 'first_verified_at' => sanitize_text_field( (string) ( $lesson['first_verified_at'] ?? gmdate( 'c' ) ) ), 'last_verified_at' => gmdate( 'c' ), 'min_core_version' => sanitize_text_field( (string) ( $lesson['min_core_version'] ?? '' ) ) );
     }
 
     private function upsert_lesson_into_state( array $state, array $lesson ) {
         if ( ! isset( $lesson['id'] ) ) { $lesson = $this->sanitize_lesson( $lesson ); if ( is_wp_error( $lesson ) ) { return $state; } }
-        foreach ( $state['lessons'] as &$existing ) {
-            if ( (string) ( $existing['id'] ?? '' ) !== (string) $lesson['id'] ) { continue; }
-            $existing['confidence'] = max( (float) ( $existing['confidence'] ?? 0 ), (float) ( $lesson['confidence'] ?? 0 ) );
-            $existing['verified_hits'] = (int) ( $existing['verified_hits'] ?? 0 ) + max( 1, (int) ( $lesson['verified_hits'] ?? 1 ) );
-            $existing['last_verified_at'] = gmdate( 'c' );
-            $existing['reason'] = $lesson['reason'] ?: (string) ( $existing['reason'] ?? '' );
-            $existing['evidence'] = array_merge( (array) ( $existing['evidence'] ?? array() ), (array) ( $lesson['evidence'] ?? array() ) );
-            return $state;
-        }
+        foreach ( $state['lessons'] as &$existing ) { if ( (string) ( $existing['id'] ?? '' ) !== (string) $lesson['id'] ) { continue; } $existing['confidence'] = max( (float) ( $existing['confidence'] ?? 0 ), (float) ( $lesson['confidence'] ?? 0 ) ); $existing['verified_hits'] = (int) ( $existing['verified_hits'] ?? 0 ) + max( 1, (int) ( $lesson['verified_hits'] ?? 1 ) ); $existing['last_verified_at'] = gmdate( 'c' ); $existing['reason'] = $lesson['reason'] ?: (string) ( $existing['reason'] ?? '' ); $existing['evidence'] = array_merge( (array) ( $existing['evidence'] ?? array() ), (array) ( $lesson['evidence'] ?? array() ) ); return $state; }
         unset( $existing ); array_unshift( $state['lessons'], $lesson ); return $state;
     }
 
@@ -183,9 +133,5 @@ class Design_Core_Elementor_Design_Memory_Store {
     private function scope( $scope ) { $scope = sanitize_key( (string) $scope ); return in_array( $scope, array( 'global', 'project', 'source' ), true ) ? $scope : 'project'; }
     private function scope_key( $value ) { return preg_replace( '/[^a-z0-9_-]/', '', strtolower( (string) $value ) ); }
     private function fingerprint( $value ) { return substr( preg_replace( '/[^a-z0-9_-]/', '', strtolower( (string) $value ) ), 0, 64 ); }
-    private function safe_evidence( array $evidence ) {
-        $safe = array(); $allowed = array( 'similarity_before', 'similarity_after', 'target_similarity', 'viewport', 'delta_px', 'delta_ratio', 'issue_count', 'iteration_count', 'architecture_score', 'visual_score', 'responsive_status', 'interaction_status', 'ux_status', 'rule_version', 'note' );
-        foreach ( $allowed as $key ) { if ( ! array_key_exists( $key, $evidence ) ) { continue; } $value = $evidence[ $key ]; if ( is_bool( $value ) || is_int( $value ) || is_float( $value ) ) { $safe[ $key ] = $value; } elseif ( is_scalar( $value ) ) { $safe[ $key ] = sanitize_text_field( (string) $value ); } }
-        return $safe;
-    }
+    private function safe_evidence( array $evidence ) { $safe = array(); $allowed = array( 'similarity_before', 'similarity_after', 'target_similarity', 'viewport', 'delta_px', 'delta_ratio', 'issue_count', 'iteration_count', 'architecture_score', 'visual_score', 'responsive_status', 'interaction_status', 'ux_status', 'rule_version', 'note' ); foreach ( $allowed as $key ) { if ( ! array_key_exists( $key, $evidence ) ) { continue; } $value = $evidence[ $key ]; if ( is_bool( $value ) || is_int( $value ) || is_float( $value ) ) { $safe[ $key ] = $value; } elseif ( is_scalar( $value ) ) { $safe[ $key ] = sanitize_text_field( (string) $value ); } } return $safe; }
 }
