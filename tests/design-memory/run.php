@@ -1,5 +1,5 @@
 <?php
-/** Design Memory v1 deterministic contract tests. */
+/** Design Memory v2 deterministic contract tests. */
 require dirname( __DIR__ ) . '/bootstrap-standalone.php';
 
 dc_require( array(
@@ -14,8 +14,9 @@ dc_require( array(
 $store = new Design_Core_Elementor_Design_Memory_Store();
 $state = $store->ensure_seeded();
 $global = $store->lessons( 'global' );
-dc_assert( 8 <= count( $global ), 'memory: governed core lessons are seeded' );
-dc_assert( 2 === (int) ( $state['seed_version'] ?? 0 ), 'memory: seed migration version is durable' );
+dc_assert( 10 <= count( $global ), 'memory: governed core lessons are seeded' );
+dc_assert( 3 === (int) ( $state['seed_version'] ?? 0 ), 'memory: seed migration version is durable' );
+dc_assert( 2 === Design_Core_Elementor_Design_Memory_Store::SCHEMA_VERSION, 'memory: compatibility-aware schema version is active' );
 
 $unverified = $store->upsert_lesson( array(
     'signature' => 'figma.small-primitive.fixed-size', 'strategy' => 'fixed-small-primitive', 'scope' => 'source', 'scope_key' => 'source-a', 'verified' => false,
@@ -35,6 +36,11 @@ dc_assert( is_array( $lesson ) && 'fixed-small-primitive' === ( $lesson['strateg
 
 dc_assert( 'figma.small-primitive.fixed-size' === Design_Core_Elementor_Design_Memory_Store::signature_key( 'FIGMA.Small-Primitive.Fixed-Size' ), 'memory: dotted semantic signatures remain stable' );
 
+$legacy_source = array( 'kind' => 'design', 'file_key' => 'abcdefgh', 'node_id' => '4:1049' );
+$revised_source_a = array_merge( $legacy_source, array( 'version' => '100', 'structural_hash' => str_repeat( 'a', 32 ) ) );
+$revised_source_b = array_merge( $legacy_source, array( 'version' => '101', 'structural_hash' => str_repeat( 'b', 32 ) ) );
+dc_assert( Design_Core_Elementor_Design_Memory_Store::source_fingerprint( $revised_source_a ) !== Design_Core_Elementor_Design_Memory_Store::source_fingerprint( $revised_source_b ), 'memory: a changed selected-node structure invalidates source-scoped memory identity' );
+
 $ir = array(
     'source_name' => 'figma', 'nodes' => array( array(
         'id' => 'figma-dot', 'source' => array( 'tag' => 'div', 'classes' => array( 'dc-figma-node-4-1087' ) ), 'semantic' => array( 'role' => 'decorative' ),
@@ -50,6 +56,14 @@ dc_assert( '9px' === ( $css['width'] ?? '' ) && '9px' === ( $css['height'] ?? ''
 dc_assert( '0 0 auto' === ( $css['flex'] ?? '' ), 'memory: small primitive cannot flex-stretch' );
 dc_assert( 9.0 === (float) ( $out['nodes'][0]['layout']['width']['value'] ?? 0 ) && 9.0 === (float) ( $out['nodes'][0]['layout']['min_height']['value'] ?? 0 ), 'memory: primitive lock also reaches native Elementor layout controls' );
 dc_assert( in_array( 'fixed-small-primitive', (array) ( $prepared['memory']['strategies'] ?? array() ), true ), 'memory: source lesson is retrieved before compile' );
+
+$future = $store->upsert_lesson( array(
+    'signature' => 'figma.rendered-node.parent', 'strategy' => 'verify-figma-parent-structure', 'scope' => 'source', 'scope_key' => 'source-a', 'verified' => true,
+    'confidence' => 0.99, 'min_core_version' => '99.0.0', 'origin' => 'contract-test',
+) );
+dc_assert( is_array( $future ), 'memory: future-version lesson can be stored as durable evidence' );
+$retrieved = $retriever->retrieve_for_ir( $ir, array( 'source_fingerprint' => 'source-a', 'project_scope_key' => 'project-a' ) );
+dc_assert( 1 <= (int) ( $retrieved['skipped_incompatible'] ?? 0 ), 'memory: incompatible future lessons are skipped instead of applied' );
 
 $learning = new Design_Core_Elementor_Correction_Learning_Engine( $store );
 $failed = array( 'status' => 'needs-correction', 'similarity' => 0.62, 'target_similarity' => 0.95, 'issues' => array( array( 'category' => 'geometry', 'severity' => 'high', 'path' => '/figma-node/4-1087', 'viewport' => 1920, 'message' => 'Small primitive stretched.' ) ) );
