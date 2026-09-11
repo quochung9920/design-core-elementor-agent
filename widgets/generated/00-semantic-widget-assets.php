@@ -1,0 +1,4 @@
+<?php
+if ( ! defined( 'ABSPATH' ) ) { exit; }
+final class Design_Core_Elementor_Semantic_Widget_Assets {public static function register(){if(function_exists('wp_register_style')&&(!function_exists('wp_style_is')||!wp_style_is('design-core-semantic-widgets','registered')))wp_register_style('design-core-semantic-widgets',DESIGN_CORE_ELEMENTOR_URL.'assets/semantic-widgets.css',array(),DESIGN_CORE_ELEMENTOR_VERSION);if(function_exists('wp_register_script')&&(!function_exists('wp_script_is')||!wp_script_is('design-core-semantic-widgets','registered')))wp_register_script('design-core-semantic-widgets',DESIGN_CORE_ELEMENTOR_URL.'assets/semantic-widgets.js',array(),DESIGN_CORE_ELEMENTOR_VERSION,true);}}
+trait Design_Core_Elementor_Semantic_Widget_Assets_Trait {public function get_style_depends(){Design_Core_Elementor_Semantic_Widget_Assets::register();return array('design-core-semantic-widgets');}}

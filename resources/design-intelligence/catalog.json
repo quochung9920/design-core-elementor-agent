@@ -1,0 +1,184 @@
+{
+  "schema_version": 1,
+  "source": {
+    "name": "UI UX Pro Max",
+    "repository": "https://github.com/nextlevelbuilder/ui-ux-pro-max-skill",
+    "license": "MIT",
+    "upstream_verified_at": "2026-08-26",
+    "snapshot_kind": "normalized-starter",
+    "note": "Design Core normalized starter subset. Run tools/sync-uiux-promax.py against an upstream checkout to generate the full local catalog without adding a Python runtime dependency to WordPress."
+  },
+  "product_profiles": [
+    {
+      "id": "b2b-service",
+      "category": "B2B Service",
+      "keywords": ["b2b", "enterprise", "consulting", "professional", "solution", "contract", "corporate", "strategy", "advisory", "roi", "engineering", "construction", "manpower", "recruitment", "workforce", "industrial"],
+      "pattern": "Feature-Rich Showcase",
+      "pattern_id": "hero-features-cta",
+      "styles": ["Accessible & Ethical", "Minimalism & Swiss Style", "Bento Box Grid", "Micro-interactions"],
+      "color_mood": "Professional navy + neutral grey + blue CTA",
+      "typography_mood": "Formal, clear, trustworthy",
+      "heading_font": "Poppins",
+      "body_font": "Open Sans",
+      "effects": ["section transitions", "feature reveals", "subtle hover feedback"],
+      "anti_patterns": ["playful visual language", "hidden credentials", "purple/pink AI gradients", "excessive motion"],
+      "recommended_shell": "service-landing",
+      "shell_fit": "strong",
+      "sections": ["hero", "trust", "capabilities", "case-studies", "process", "cta"],
+      "colors": {
+        "primary": "#0F172A", "on_primary": "#FFFFFF", "secondary": "#334155", "on_secondary": "#FFFFFF", "accent": "#0369A1", "on_accent": "#FFFFFF", "background": "#F8FAFC", "foreground": "#020617", "card": "#FFFFFF", "card_foreground": "#020617", "muted": "#E8ECF1", "muted_foreground": "#475569", "border": "#E2E8F0", "destructive": "#DC2626", "on_destructive": "#FFFFFF", "ring": "#0F172A"
+      },
+      "defaults": {"variance": 4, "motion": 3, "density": 4},
+      "considerations": ["credibility", "case studies", "ROI messaging", "clear capabilities", "visible contact path"]
+    },
+    {
+      "id": "saas-general",
+      "category": "SaaS (General)",
+      "keywords": ["app", "b2b", "cloud", "saas", "software", "subscription", "platform", "tool"],
+      "pattern": "Hero + Features + CTA",
+      "pattern_id": "hero-features-cta",
+      "styles": ["Glassmorphism", "Flat Design", "Soft UI Evolution", "Minimalism & Swiss Style"],
+      "color_mood": "Trust blue + accent contrast",
+      "typography_mood": "Professional + hierarchy",
+      "heading_font": "Poppins",
+      "body_font": "Open Sans",
+      "effects": ["subtle hover 200-250ms", "smooth transitions"],
+      "anti_patterns": ["excessive animation", "dark mode by default without product reason"],
+      "recommended_shell": "service-landing",
+      "shell_fit": "strong",
+      "sections": ["hero", "value-proposition", "features", "proof", "cta"],
+      "colors": {
+        "primary": "#2563EB", "on_primary": "#FFFFFF", "secondary": "#3B82F6", "on_secondary": "#000000", "accent": "#EA580C", "on_accent": "#000000", "background": "#F8FAFC", "foreground": "#1E293B", "card": "#FFFFFF", "card_foreground": "#1E293B", "muted": "#E9EFF8", "muted_foreground": "#475569", "border": "#E2E8F0", "destructive": "#DC2626", "on_destructive": "#FFFFFF", "ring": "#2563EB"
+      },
+      "defaults": {"variance": 5, "motion": 4, "density": 5},
+      "considerations": ["clear primary CTA", "fast product understanding", "feature hierarchy", "trust proof"]
+    },
+    {
+      "id": "micro-saas",
+      "category": "Micro SaaS",
+      "keywords": ["micro-saas", "indie", "niche", "solo", "bootstrap", "solopreneur", "small-team", "indie-hacker", "product-hunt"],
+      "pattern": "Minimal & Direct + Demo",
+      "pattern_id": "product-demo-features",
+      "styles": ["Flat Design", "Vibrant & Block-based", "Motion-Driven", "Micro-interactions"],
+      "color_mood": "Indigo + emerald CTA",
+      "typography_mood": "Modern + energetic",
+      "heading_font": "Space Grotesk",
+      "body_font": "DM Sans",
+      "effects": ["contextual scroll reveal", "product demo emphasis"],
+      "anti_patterns": ["slow first paint", "feature overload", "decorative motion without value"],
+      "recommended_shell": "service-landing",
+      "shell_fit": "approximate",
+      "sections": ["hero", "demo", "benefits", "proof", "pricing-or-cta"],
+      "colors": {
+        "primary": "#6366F1", "on_primary": "#000000", "secondary": "#818CF8", "on_secondary": "#0F172A", "accent": "#059669", "on_accent": "#000000", "background": "#F5F3FF", "foreground": "#1E1B4B", "card": "#FFFFFF", "card_foreground": "#1E1B4B", "muted": "#EBEFF9", "muted_foreground": "#475569", "border": "#E0E7FF", "destructive": "#DC2626", "on_destructive": "#FFFFFF", "ring": "#6366F1"
+      },
+      "defaults": {"variance": 7, "motion": 6, "density": 5},
+      "considerations": ["show product quickly", "keep the page simple", "optimize for speed", "make trial or signup obvious"]
+    },
+    {
+      "id": "ecommerce",
+      "category": "E-commerce",
+      "keywords": ["buy", "commerce", "ecommerce", "products", "retail", "sell", "shop", "store"],
+      "pattern": "Feature-Rich Showcase",
+      "pattern_id": "hero-features-cta",
+      "styles": ["Vibrant & Block-based", "Aurora UI", "Motion-Driven"],
+      "color_mood": "Success green + urgency orange",
+      "typography_mood": "Engaging + clear hierarchy",
+      "heading_font": "Poppins",
+      "body_font": "Open Sans",
+      "effects": ["card hover lift", "subtle product scale", "clear loading feedback"],
+      "anti_patterns": ["text-heavy product grids", "flat hierarchy", "motion that blocks shopping"],
+      "recommended_shell": "service-landing",
+      "shell_fit": "approximate",
+      "sections": ["hero", "categories", "featured-products", "benefits", "social-proof", "cta"],
+      "colors": {
+        "primary": "#059669", "on_primary": "#000000", "secondary": "#10B981", "on_secondary": "#0F172A", "accent": "#EA580C", "on_accent": "#000000", "background": "#ECFDF5", "foreground": "#064E3B", "card": "#FFFFFF", "card_foreground": "#064E3B", "muted": "#E8F1F3", "muted_foreground": "#475569", "border": "#A7F3D0", "destructive": "#DC2626", "on_destructive": "#FFFFFF", "ring": "#059669"
+      },
+      "defaults": {"variance": 6, "motion": 5, "density": 6},
+      "considerations": ["conversion hierarchy", "product scanning", "trust", "clear cart and checkout path"]
+    },
+    {
+      "id": "ecommerce-luxury",
+      "category": "E-commerce Luxury",
+      "keywords": ["luxury ecommerce", "premium shop", "high-end retail", "exclusive products", "fashion luxury"],
+      "pattern": "Feature-Rich Showcase",
+      "pattern_id": "hero-features-cta",
+      "styles": ["Liquid Glass", "Glassmorphism", "3D & Hyperrealism", "Aurora UI"],
+      "color_mood": "Premium dark + restrained gold",
+      "typography_mood": "Elegant + refined",
+      "heading_font": "Playfair Display",
+      "body_font": "Inter",
+      "effects": ["slow restrained reveals", "premium material depth"],
+      "anti_patterns": ["playful colors", "visual clutter", "cheap urgency patterns"],
+      "recommended_shell": "service-landing",
+      "shell_fit": "approximate",
+      "sections": ["hero", "editorial-story", "featured-products", "craft-or-proof", "cta"],
+      "colors": {
+        "primary": "#1C1917", "on_primary": "#FFFFFF", "secondary": "#44403C", "on_secondary": "#FFFFFF", "accent": "#A16207", "on_accent": "#FFFFFF", "background": "#FAFAF9", "foreground": "#0C0A09", "card": "#FFFFFF", "card_foreground": "#0C0A09", "muted": "#E8ECF0", "muted_foreground": "#475569", "border": "#D6D3D1", "destructive": "#DC2626", "on_destructive": "#FFFFFF", "ring": "#1C1917"
+      },
+      "defaults": {"variance": 5, "motion": 4, "density": 3},
+      "considerations": ["premium imagery", "trust at checkout", "restraint", "storytelling"]
+    },
+    {
+      "id": "beauty-spa-wellness",
+      "category": "Beauty/Spa/Wellness Service",
+      "keywords": ["spa", "beauty", "salon", "wellness", "treatment", "relaxation", "massage", "skincare", "facial", "aesthetic", "self-care"],
+      "pattern": "Hero-Centric Design + Social Proof",
+      "pattern_id": "hero-testimonials-cta",
+      "styles": ["Soft UI Evolution", "Neumorphism", "Glassmorphism", "Minimalism & Swiss Style"],
+      "color_mood": "Soft pink + lavender luxury",
+      "typography_mood": "Elegant + calm",
+      "heading_font": "Playfair Display",
+      "body_font": "Inter",
+      "effects": ["soft reveal", "subtle depth", "calm transitions"],
+      "anti_patterns": ["neon colors", "aggressive animation", "busy dark surfaces", "hard-sell urgency"],
+      "recommended_shell": "service-landing",
+      "shell_fit": "strong",
+      "sections": ["hero", "services", "social-proof", "before-after", "booking", "contact"],
+      "colors": {
+        "primary": "#EC4899", "on_primary": "#000000", "secondary": "#F9A8D4", "on_secondary": "#0F172A", "accent": "#8B5CF6", "on_accent": "#000000", "background": "#FDF2F8", "foreground": "#831843", "card": "#FFFFFF", "card_foreground": "#831843", "muted": "#F1EEF5", "muted_foreground": "#475569", "border": "#FBCFE8", "destructive": "#DC2626", "on_destructive": "#FFFFFF", "ring": "#EC4899"
+      },
+      "defaults": {"variance": 4, "motion": 3, "density": 2},
+      "considerations": ["calming aesthetic", "booking path", "service menu", "testimonials", "high quality imagery"]
+    },
+    {
+      "id": "analytics-dashboard",
+      "category": "Analytics Dashboard",
+      "keywords": ["analytics", "dashboard", "metrics", "charts", "data", "drill-down", "reporting", "business intelligence"],
+      "pattern": "Data-Dense + Drill-Down",
+      "pattern_id": "dashboard",
+      "styles": ["Data-Dense Dashboard", "Heat Map & Heatmap Style"],
+      "color_mood": "Blue data + amber highlights",
+      "typography_mood": "Clear + functional",
+      "heading_font": "Poppins",
+      "body_font": "Open Sans",
+      "effects": ["hover tooltips", "chart zoom", "filter feedback"],
+      "anti_patterns": ["ornate decoration", "missing filters", "color-only status encoding"],
+      "recommended_shell": "",
+      "shell_fit": "unavailable",
+      "sections": ["summary", "filters", "key-metrics", "charts", "details"],
+      "colors": {
+        "primary": "#1E40AF", "on_primary": "#FFFFFF", "secondary": "#3B82F6", "on_secondary": "#000000", "accent": "#D97706", "on_accent": "#000000", "background": "#F8FAFC", "foreground": "#1E3A8A", "card": "#FFFFFF", "card_foreground": "#1E3A8A", "muted": "#E9EEF6", "muted_foreground": "#475569", "border": "#DBEAFE", "destructive": "#DC2626", "on_destructive": "#FFFFFF", "ring": "#1E40AF"
+      },
+      "defaults": {"variance": 3, "motion": 2, "density": 9},
+      "considerations": ["filtering", "data export", "legends", "tooltips", "accessible status encoding"]
+    }
+  ],
+  "ux_rules": [
+    {"id":"uuxpm-reduced-motion","category":"Accessibility","severity":"high","check":"browser-reduced-motion","guidance":"Respect prefers-reduced-motion and keep a readable static final state when motion is reduced."},
+    {"id":"uuxpm-focus-not-obscured","category":"Accessibility","severity":"high","check":"browser-focus","guidance":"Sticky UI and overlays must not fully cover the keyboard-focused control."},
+    {"id":"uuxpm-focus-appearance","category":"Accessibility","severity":"medium","check":"browser-focus","guidance":"Keep focus indicators visible with sufficient area and state contrast; do not remove focus rings without an equivalent."},
+    {"id":"uuxpm-target-size","category":"Accessibility","severity":"high","check":"browser-touch-target","guidance":"Use adequately sized pointer targets and spacing; verify web target-size exceptions rather than assuming native mobile guidance."},
+    {"id":"uuxpm-drag-alternative","category":"Accessibility","severity":"high","check":"interaction","guidance":"When drag is author-controlled, provide a single-pointer and keyboard alternative."},
+    {"id":"uuxpm-image-alt","category":"Accessibility","severity":"high","check":"elementor-image-alt","guidance":"Meaningful images need useful alternative text; decorative imagery should be intentionally marked decorative."},
+    {"id":"uuxpm-control-name","category":"Accessibility","severity":"high","check":"elementor-control-name","guidance":"Interactive controls need an accessible name; icon-only controls require an explicit label."},
+    {"id":"uuxpm-heading-hierarchy","category":"Typography","severity":"medium","check":"elementor-heading-order","guidance":"Keep heading hierarchy meaningful and avoid unexplained level jumps."},
+    {"id":"uuxpm-long-token-wrap","category":"Layout","severity":"high","check":"browser-overflow","guidance":"Long URLs, identifiers and user content must not force horizontal overflow."},
+    {"id":"uuxpm-autoplay-media","category":"Sustainability","severity":"medium","check":"browser-media","guidance":"Prefer user-controlled media, captions and reduced-motion behavior; avoid heavy autoplay loops."},
+    {"id":"uuxpm-auto-rotating-controls","category":"Animation","severity":"high","check":"interaction","guidance":"Auto-rotating content needs previous/next and pause controls and should stop for focus, hover and reduced motion."},
+    {"id":"uuxpm-hover-vs-tap","category":"Interaction","severity":"high","check":"interaction","guidance":"Do not rely on hover for a primary action; touch and keyboard users need equivalent activation."},
+    {"id":"uuxpm-loading-feedback","category":"Interaction","severity":"high","check":"interaction","guidance":"Show understandable feedback during asynchronous operations instead of leaving the interface frozen."},
+    {"id":"uuxpm-form-error-summary","category":"Forms","severity":"high","check":"interaction","guidance":"For failed form validation, pair inline errors with a focusable summary that links back to invalid fields when appropriate."},
+    {"id":"uuxpm-contrast","category":"Accessibility","severity":"high","check":"browser-contrast","guidance":"Verify text and interactive-state contrast against their actual rendered backgrounds; do not rely on color tokens alone."}
+  ]
+}

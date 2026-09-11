@@ -1,0 +1,57 @@
+name: Deploy to Staging
+
+# Push to main ONLY. Pull requests (even against main) never trigger this --
+# GitHub's pull_request event is intentionally not listed below, and a PR
+# branch push does not match `branches: [main]`. workflow_dispatch exists
+# purely so a human can re-run a deploy for the current main tip on demand;
+# it never fires on its own.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+# Only one deploy attempt in flight from GitHub's side at a time (the server
+# script also single-flights itself via flock, independently).
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Configure pinned SSH access
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.STAGING_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Deploy exact commit to staging
+        env:
+          SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+        run: |
+          set -euo pipefail
+          # The server-side forced command only ever accepts "deploy <sha>" --
+          # anything else it refuses outright (see ssh-deploy-wrapper.sh). The
+          # server independently re-verifies this SHA is on origin/main before
+          # touching anything, so a compromised runner cannot deploy arbitrary
+          # code just by changing this line.
+          ssh -i ~/.ssh/deploy_key \
+              -o UserKnownHostsFile=~/.ssh/known_hosts \
+              -o StrictHostKeyChecking=yes \
+              -o BatchMode=yes \
+              -o ConnectTimeout=15 \
+              "$SSH_USER@$SSH_HOST" "deploy ${{ github.sha }}"
+
+      - name: Clean up local key material
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
