@@ -54,7 +54,7 @@ stage "php -l (all files)"
 if find . -name '*.php' -not -path './vendor/*' -not -path './node_modules/*' -print0 | xargs -0 -n1 "$PHP_BIN" -l >"$ARTIFACTS/syntax.txt" 2>&1; then ok; else bad "see $ARTIFACTS/syntax.txt" "syntax"; fi
 
 say ""; say "Contracts"
-CONTRACTS="architecture registry native-fidelity strict-native responsive-compiler design-intelligence design-brain rc19-intelligence rc20-fidelity reference-integration fixed-width-governance figma-fidelity figma-vector-assets figma-strict-verifiers pawcare-benchmark design-memory"
+CONTRACTS="architecture registry native-fidelity strict-native responsive-compiler design-intelligence design-brain rc19-intelligence rc20-fidelity reference-integration fixed-width-governance figma-fidelity figma-vector-assets figma-raster-assets figma-strict-verifiers pawcare-benchmark design-memory"
 for T in $CONTRACTS; do
   stage "$T"
   if [[ "$T" == "figma-fidelity" ]]; then
