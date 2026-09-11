@@ -2,16 +2,17 @@
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 /**
- * Network/auth boundary for Figma. Design IR conversion remains in the adapter.
+ * Network/auth boundary for Figma.
  *
- * Credentials are never persisted by this class. Configure a token through the
- * DESIGN_CORE_FIGMA_ACCESS_TOKEN constant or the
- * design_core_elementor_figma_access_token filter.
+ * v2 adds bounded rendered-reference export and exact vector export so the
+ * compiler can preserve vector/icon assets and compare the Elementor result
+ * against Figma's own render instead of trusting inferred geometry alone.
  */
 class Design_Core_Elementor_Figma_Transport {
-    const VERSION = 1;
+    const VERSION = 2;
     const API_BASE = 'https://api.figma.com/v1';
     const MAX_RESPONSE_BYTES = 12582912;
+    const MAX_VECTOR_EXPORTS = 48;
 
     public function configured() { return '' !== $this->token(); }
 
@@ -30,18 +31,59 @@ class Design_Core_Elementor_Figma_Transport {
         return array( 'url' => $url, 'file_key' => $file_key, 'node_id' => $node_id, 'kind' => strtolower( (string) $segments[0] ) );
     }
 
+    /**
+     * Read a Figma URL with optional source-fidelity evidence.
+     *
+     * Options:
+     * - resolve_image_fills: map IMAGE fills to temporary CDN URLs.
+     * - resolve_vector_assets: export authored vector leaf nodes as SVG.
+     * - export_reference: export the selected node as a Figma-rendered PNG.
+     */
     public function read_url( $url, array $options = array() ) {
         $parsed = $this->parse_url( $url );
         if ( is_wp_error( $parsed ) ) { return $parsed; }
         $payload = $this->fetch_document( $parsed['file_key'], $parsed['node_id'] );
         if ( is_wp_error( $payload ) ) { return $payload; }
+
         $image_fills = ! empty( $options['resolve_image_fills'] ) ? $this->fetch_image_fills( $parsed['file_key'] ) : array();
         if ( is_wp_error( $image_fills ) ) { $image_fills = array(); }
+
+        $vector_assets = array();
+        if ( ! empty( $options['resolve_vector_assets'] ) ) {
+            $vector_ids = $this->collect_vector_ids( (array) ( $payload['document'] ?? $payload ) );
+            if ( $vector_ids ) {
+                $vector_assets = $this->export_nodes( $parsed['file_key'], $vector_ids, 'svg', 1 );
+                if ( is_wp_error( $vector_assets ) ) { $vector_assets = array(); }
+            }
+        }
+
+        $reference = array();
+        if ( ! empty( $options['export_reference'] ) ) {
+            $root = (array) ( $payload['document'] ?? array() );
+            $reference_id = $parsed['node_id'] ?: sanitize_text_field( (string) ( $root['id'] ?? '' ) );
+            if ( $reference_id ) {
+                $images = $this->export_nodes( $parsed['file_key'], array( $reference_id ), 'png', 1 );
+                if ( ! is_wp_error( $images ) && ! empty( $images[ $reference_id ] ) ) {
+                    $box = (array) ( $root['absoluteBoundingBox'] ?? array() );
+                    $reference = array(
+                        'node_id' => $reference_id,
+                        'url' => esc_url_raw( (string) $images[ $reference_id ] ),
+                        'format' => 'png',
+                        'scale' => 1,
+                        'width' => isset( $box['width'] ) && is_numeric( $box['width'] ) ? (int) round( (float) $box['width'] ) : 0,
+                        'height' => isset( $box['height'] ) && is_numeric( $box['height'] ) ? (int) round( (float) $box['height'] ) : 0,
+                    );
+                }
+            }
+        }
+
         return array(
             'transport_version' => self::VERSION,
             'source' => $parsed,
             'figma' => $payload,
             'image_fills' => $image_fills,
+            'vector_assets' => $vector_assets,
+            'reference_image' => $reference,
         );
     }
 
@@ -73,11 +115,13 @@ class Design_Core_Elementor_Figma_Transport {
         if ( is_wp_error( $response ) ) { return $response; }
         $images = (array) ( $response['meta']['images'] ?? $response['images'] ?? array() );
         $safe = array();
-        foreach ( $images as $ref => $url ) { if ( is_string( $ref ) && is_string( $url ) && preg_match( '#^https://#i', $url ) ) { $safe[ sanitize_text_field( $ref ) ] = esc_url_raw( $url ); } }
+        foreach ( $images as $ref => $url ) {
+            if ( is_string( $ref ) && is_string( $url ) && preg_match( '#^https://#i', $url ) ) { $safe[ sanitize_text_field( $ref ) ] = esc_url_raw( $url ); }
+        }
         return $safe;
     }
 
-    /** Export selected nodes as rendered images; useful for reference evidence. */
+    /** Export selected nodes as rendered images; useful for reference evidence and vectors. */
     public function export_nodes( $file_key, array $node_ids, $format = 'png', $scale = 1 ) {
         $file_key = $this->file_key( $file_key ); if ( is_wp_error( $file_key ) ) { return $file_key; }
         $node_ids = array_values( array_unique( array_filter( array_map( 'sanitize_text_field', $node_ids ) ) ) );
@@ -86,8 +130,26 @@ class Design_Core_Elementor_Figma_Transport {
         $scale = max( 0.01, min( 4, (float) $scale ) );
         $response = $this->request( '/images/' . rawurlencode( $file_key ) . '?ids=' . rawurlencode( implode( ',', $node_ids ) ) . '&format=' . rawurlencode( $format ) . '&scale=' . rawurlencode( (string) $scale ) );
         if ( is_wp_error( $response ) ) { return $response; }
-        $images = array(); foreach ( (array) ( $response['images'] ?? array() ) as $id => $url ) { if ( is_string( $url ) ) { $images[ sanitize_text_field( (string) $id ) ] = esc_url_raw( $url ); } }
+        $images = array();
+        foreach ( (array) ( $response['images'] ?? array() ) as $id => $url ) {
+            if ( is_string( $url ) && preg_match( '#^https://#i', $url ) ) { $images[ sanitize_text_field( (string) $id ) ] = esc_url_raw( $url ); }
+        }
         return $images;
+    }
+
+    private function collect_vector_ids( array $root ) {
+        $ids = array(); $queue = array( $root );
+        while ( $queue && count( $ids ) < self::MAX_VECTOR_EXPORTS ) {
+            $node = array_shift( $queue );
+            if ( ! is_array( $node ) || false === ( $node['visible'] ?? true ) ) { continue; }
+            $type = strtoupper( (string) ( $node['type'] ?? '' ) );
+            $children = array_values( array_filter( (array) ( $node['children'] ?? array() ), 'is_array' ) );
+            if ( in_array( $type, array( 'VECTOR', 'BOOLEAN_OPERATION', 'LINE', 'STAR', 'POLYGON' ), true ) && ! $children && ! empty( $node['id'] ) ) {
+                $ids[] = sanitize_text_field( (string) $node['id'] );
+            }
+            foreach ( $children as $child ) { $queue[] = $child; }
+        }
+        return array_values( array_unique( $ids ) );
     }
 
     private function request( $path ) {

@@ -28,6 +28,8 @@ jobs:
           php tests/design-brain/run.php
           php tests/rc19-intelligence/run.php
           php tests/rc20-fidelity/run.php
+          php tests/figma-fidelity/run.php
+          php tests/figma-fidelity/adapter.php
   browser-qa:
     runs-on: ubuntu-latest
     steps:

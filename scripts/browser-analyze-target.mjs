@@ -3,8 +3,7 @@ import { pathToFileURL } from 'node:url';
 import fs from 'node:fs';
 
 const target = process.argv[2];
-const widths = (process.argv[3] || '1440,1024,767,390')
-  .split(',').map(Number).filter(w => Number.isFinite(w) && w >= 240 && w <= 7680).slice(0, 8);
+const widths = (process.argv[3] || '1440,1024,767,390').split(',').map(Number).filter(w => Number.isFinite(w) && w >= 240 && w <= 7680).slice(0, 8);
 const extraHosts = (process.argv[4] || '').split(',').map(v => v.trim().toLowerCase()).filter(Boolean);
 if (!target) { console.error('Missing target'); process.exit(2); }
 
@@ -14,15 +13,19 @@ try { targetUrl = isRemote ? new URL(target) : pathToFileURL(fs.realpathSync(tar
 catch { console.error('Invalid target'); process.exit(2); }
 
 const allowedHosts = new Set(extraHosts);
+allowedHosts.add('fonts.googleapis.com');
+allowedHosts.add('fonts.gstatic.com');
 const targetOrigin = isRemote ? targetUrl.origin.toLowerCase() : '';
-
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({ javaScriptEnabled: isRemote });
+
 if (isRemote) {
   await context.route(/^https?:\/\//i, async route => {
     try {
-      const url = new URL(route.request().url());
-      if (url.origin.toLowerCase() === targetOrigin || allowedHosts.has(url.hostname.toLowerCase())) return route.continue();
+      const request = route.request();
+      const url = new URL(request.url());
+      if (url.origin.toLowerCase() === targetOrigin) return route.continue();
+      if (allowedHosts.has(url.hostname.toLowerCase()) && ['font', 'image', 'stylesheet', 'media'].includes(request.resourceType())) return route.continue();
     } catch {}
     return route.abort('blockedbyclient');
   });
@@ -38,7 +41,10 @@ try {
   for (const width of widths) {
     await page.setViewportSize({ width, height: 1200 });
     await page.goto(targetUrl.href, { waitUntil: isRemote ? 'domcontentloaded' : 'load' });
-    if (isRemote) await page.waitForTimeout(600);
+    if (isRemote) {
+      await page.evaluate(async () => { try { if (document.fonts?.ready) await document.fonts.ready; } catch {} });
+      await page.waitForTimeout(350);
+    }
     results[width] = await page.evaluate((maxElements) => {
       const props = [
         'display','position','flexDirection','flexWrap','justifyContent','alignItems','gap','rowGap','columnGap',
@@ -67,15 +73,12 @@ try {
         const elementorType = owner?.getAttribute('data-element_type') || '';
         const widgetRaw = owner?.getAttribute('data-widget_type') || '';
         const widgetType = widgetRaw ? widgetRaw.split('.')[0] : '';
+        const figmaOwner = el.matches?.('[class*="dc-figma-node-"]') ? el : el.closest?.('[class*="dc-figma-node-"]');
+        const figmaClass = figmaOwner ? [...figmaOwner.classList].find(c => c.startsWith('dc-figma-node-')) || '' : '';
         return {
-          index,
-          domPath: domPath(el),
-          tag: el.tagName.toLowerCase(),
-          id: el.id || '',
-          classes: [...el.classList],
-          text: normalizedText(el.textContent),
-          ownText: normalizedText([...el.childNodes].filter(n => n.nodeType === Node.TEXT_NODE).map(n => n.textContent).join(' ')),
-          elementorId, elementorType, widgetType,
+          index, domPath: domPath(el), tag: el.tagName.toLowerCase(), id: el.id || '', classes: [...el.classList],
+          text: normalizedText(el.textContent), ownText: normalizedText([...el.childNodes].filter(n => n.nodeType === Node.TEXT_NODE).map(n => n.textContent).join(' ')),
+          elementorId, elementorType, widgetType, figmaClass,
           rect: { x:r.x, y:r.y, width:r.width, height:r.height },
           naturalWidth: el instanceof HTMLImageElement ? el.naturalWidth : 0,
           naturalHeight: el instanceof HTMLImageElement ? el.naturalHeight : 0,
@@ -84,15 +87,7 @@ try {
       });
     }, MAX_ELEMENTS);
   }
-  console.log(JSON.stringify({
-    schema_version: 4,
-    target: targetUrl.href,
-    javascript_enabled: isRemote,
-    network_policy: isRemote ? 'same-origin-plus-explicit-hosts' : 'blocked',
-    target_origin: targetOrigin,
-    allowed_hosts: [...allowedHosts],
-    viewports: results
-  }));
+  console.log(JSON.stringify({ schema_version: 5, target: targetUrl.href, javascript_enabled: isRemote, network_policy: isRemote ? 'same-origin-plus-explicit-static-hosts' : 'blocked', target_origin: targetOrigin, allowed_hosts: [...allowedHosts], viewports: results }));
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 4;
