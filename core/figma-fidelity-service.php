@@ -8,7 +8,7 @@ if ( ! defined( 'ABSPATH' ) ) { exit; }
  * safety are mandatory evidence.
  */
 class Design_Core_Elementor_Figma_Fidelity_Service {
-    const VERSION = 4;
+    const VERSION = 5;
     const DEFAULT_TARGET_SIMILARITY = 0.95;
 
     public function prepare( $figma_url, array $options = array() ) {
@@ -16,9 +16,14 @@ class Design_Core_Elementor_Figma_Fidelity_Service {
         $transport = new Design_Core_Elementor_Figma_Transport();
         if ( ! $transport->configured() ) { return new WP_Error( 'design_core_figma_token_missing', 'Configure DESIGN_CORE_FIGMA_ACCESS_TOKEN before using the local Figma fidelity path.' ); }
 
-        $source = $transport->read_url( $figma_url, array( 'resolve_image_fills' => true, 'resolve_vector_assets' => true, 'export_reference' => true ) );
+        $source = $transport->read_url( $figma_url, array( 'resolve_image_fills' => true, 'resolve_raster_assets' => true, 'resolve_vector_assets' => true, 'export_reference' => true ) );
         if ( is_wp_error( $source ) ) { return $source; }
         $asset_diagnostics = (array) ( $source['asset_diagnostics'] ?? array() );
+        $raster_candidates = (int) ( $asset_diagnostics['raster_candidates'] ?? 0 );
+        $raster_exports = (int) ( $asset_diagnostics['raster_exports'] ?? count( (array) ( $source['rendered_image_assets'] ?? array() ) ) );
+        if ( $raster_candidates > $raster_exports && empty( $options['allow_partial_raster_assets'] ) ) {
+            return new WP_Error( 'design_core_figma_raster_export_incomplete', 'Strict Figma fidelity found transformed image atoms that could not be rendered by Figma. Refusing to guess their crop/transform in Elementor.' );
+        }
         $vector_candidates = (int) ( $asset_diagnostics['vector_candidates'] ?? 0 );
         $vector_exports = (int) ( $asset_diagnostics['vector_exports'] ?? count( (array) ( $source['vector_assets'] ?? array() ) ) );
         if ( $vector_candidates > $vector_exports && empty( $options['allow_partial_vector_assets'] ) ) {
@@ -60,11 +65,13 @@ class Design_Core_Elementor_Figma_Fidelity_Service {
                 'normalization_version' => (int) ( $ir['diagnostics']['normalization']['version'] ?? 0 ), 'node_count' => count( (array) ( $ir['nodes'] ?? array() ) ),
                 'source_version' => sanitize_text_field( (string) ( $source['source']['version'] ?? '' ) ),
                 'source_structural_hash' => sanitize_text_field( (string) ( $source['source']['structural_hash'] ?? '' ) ),
-                'resolved_image_fills' => count( (array) ( $source['image_fills'] ?? array() ) ), 'resolved_vector_assets' => count( (array) ( $source['vector_assets'] ?? array() ) ),
+                'resolved_image_fills' => count( (array) ( $source['image_fills'] ?? array() ) ),
+                'resolved_rendered_image_assets' => count( (array) ( $source['rendered_image_assets'] ?? array() ) ),
+                'resolved_vector_assets' => count( (array) ( $source['vector_assets'] ?? array() ) ),
                 'asset_diagnostics' => Design_Core_Elementor_Change_Ledger::transport_safe( $asset_diagnostics ),
                 'reference_exported' => true, 'memory_lessons' => count( (array) ( $memory['lessons'] ?? array() ) ), 'memory_strategies' => array_values( (array) ( $memory['strategies'] ?? array() ) ),
                 'memory_skipped_incompatible' => (int) ( $memory['skipped_incompatible'] ?? 0 ),
-                'policy' => 'figma-is-authoritative-strict-assets-versioned-memory-geometry-structure-font-responsive-runtime-and-rendered-verification',
+                'policy' => 'figma-is-authoritative-strict-raster-vector-assets-versioned-memory-geometry-structure-font-responsive-runtime-and-rendered-verification',
             ),
         );
     }
