@@ -17,27 +17,13 @@ class Design_Core_Elementor_Failure_Signature_Engine {
             $relative = (array) ( $figma['relative_geometry'] ?? array() );
             $role = sanitize_key( (string) ( $node['semantic']['role'] ?? '' ) );
 
-            if ( ! empty( $figma['text_composition'] ) || 'rich-heading' === sanitize_key( (string) ( $node['semantic']['component_type'] ?? '' ) ) ) {
-                $signals[] = 'figma.mixed-text.composition';
-            }
-            if ( in_array( strtoupper( (string) ( $sizing['horizontal'] ?? $sizing['horizontal_mode'] ?? '' ) ), array( 'FILL', 'FILL_CONTAINER' ), true ) ) {
-                $signals[] = 'figma.auto-layout.fill';
-            }
-            if ( $this->has_bottom_anchor( $relative, $figma ) ) {
-                $signals[] = 'figma.absolute.bottom-anchor';
-            }
-            if ( $this->is_small_primitive( $type, $geo, $node ) ) {
-                $signals[] = 'figma.small-primitive.fixed-size';
-            }
-            if ( $this->has_vector_asset( $node, $type ) ) {
-                $signals[] = 'figma.vector-component.asset';
-            }
-            if ( in_array( $role, array( 'button', 'button-composition' ), true ) && $this->subtree_has_media_signal( $node, $ir ) ) {
-                $signals[] = 'figma.button.icon-composition';
-            }
-            if ( $this->is_fixed_media( $node, $sizing, $geo ) ) {
-                $signals[] = 'figma.media.fixed-height';
-            }
+            if ( ! empty( $figma['text_composition'] ) || 'rich-heading' === sanitize_key( (string) ( $node['semantic']['component_type'] ?? '' ) ) ) { $signals[] = 'figma.mixed-text.composition'; }
+            if ( in_array( strtoupper( (string) ( $sizing['horizontal'] ?? $sizing['horizontal_mode'] ?? '' ) ), array( 'FILL', 'FILL_CONTAINER' ), true ) ) { $signals[] = 'figma.auto-layout.fill'; }
+            if ( $this->has_bottom_anchor( $relative, $figma ) ) { $signals[] = 'figma.absolute.bottom-anchor'; }
+            if ( $this->is_small_primitive( $type, $geo, $node ) ) { $signals[] = 'figma.small-primitive.fixed-size'; }
+            if ( $this->has_vector_asset( $node, $type ) ) { $signals[] = 'figma.vector-component.asset'; }
+            if ( in_array( $role, array( 'button', 'button-composition' ), true ) && $this->subtree_has_media_signal( $node, $ir ) ) { $signals[] = 'figma.button.icon-composition'; }
+            if ( $this->is_fixed_media( $node, $sizing, $geo ) ) { $signals[] = 'figma.media.fixed-height'; }
         }
         if ( 'figma' === sanitize_key( (string) ( $ir['source_name'] ?? '' ) ) ) { $signals[] = 'figma.rendered-node.geometry'; }
         return array_values( array_unique( array_filter( array_map( 'sanitize_key', $signals ) ) ) );
@@ -46,6 +32,7 @@ class Design_Core_Elementor_Failure_Signature_Engine {
     public function signature_from_issue( array $issue, array $context = array() ) {
         $category = sanitize_key( (string) ( $issue['category'] ?? 'visual' ) );
         $figma_id = sanitize_text_field( (string) ( $issue['figma_id'] ?? '' ) );
+        if ( ! $figma_id && preg_match( '#/figma-node/(\d+)-(\d+)#', (string) ( $issue['path'] ?? '' ), $match ) ) { $figma_id = $match[1] . ':' . $match[2]; }
         $source_node = $figma_id && ! empty( $context['figma_nodes'][ $figma_id ] ) ? (array) $context['figma_nodes'][ $figma_id ] : array();
         if ( $source_node ) {
             $type = strtoupper( (string) ( $source_node['figma']['type'] ?? '' ) );
@@ -103,9 +90,7 @@ class Design_Core_Elementor_Failure_Signature_Engine {
     }
 
     private function has_vector_asset( array $node, $type ) {
-        foreach ( (array) ( $node['assets']['images'] ?? array() ) as $asset ) {
-            if ( 'figma-vector-export' === (string) ( $asset['source'] ?? '' ) ) { return true; }
-        }
+        foreach ( (array) ( $node['assets']['images'] ?? array() ) as $asset ) { if ( 'figma-vector-export' === (string) ( $asset['source'] ?? '' ) ) { return true; } }
         return in_array( $type, array( 'VECTOR', 'BOOLEAN_OPERATION', 'LINE', 'STAR', 'POLYGON' ), true );
     }
 
@@ -120,8 +105,7 @@ class Design_Core_Elementor_Failure_Signature_Engine {
         foreach ( (array) ( $ir['nodes'] ?? array() ) as $item ) { if ( is_array( $item ) && ! empty( $item['id'] ) ) { $index[ $item['id'] ] = $item; } }
         $queue = (array) ( $node['children'] ?? array() );
         while ( $queue ) {
-            $id = array_shift( $queue );
-            $child = $index[ $id ] ?? null;
+            $id = array_shift( $queue ); $child = $index[ $id ] ?? null;
             if ( ! is_array( $child ) ) { continue; }
             if ( ! empty( $child['assets']['images'] ) || 'img' === strtolower( (string) ( $child['source']['tag'] ?? '' ) ) ) { return true; }
             foreach ( (array) ( $child['children'] ?? array() ) as $nested ) { $queue[] = $nested; }
