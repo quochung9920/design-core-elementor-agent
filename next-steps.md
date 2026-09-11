@@ -1,30 +1,20 @@
-# Design Core Elementor 1.0.0-rc22
+# Design Core Elementor — next steps after RC23
 
-rc22 is the local AI design-engine release. It restores the design-intelligence and rendered-fidelity layers and connects them to the current Elementor compiler/runtime without requiring MCP or remote-control infrastructure.
+RC23 establishes the strict Figma fidelity path: authored Figma layout semantics, mixed text composition, vector/media preservation, draft-only Elementor compilation and rendered Figma reference verification.
 
-## Implemented
+## Immediate acceptance work
 
-- Design Intelligence v2 with 50+ real-world vertical profiles, including dedicated veterinary and medical families.
-- Design Brief parser and complete-site Page Strategy engine.
-- Local Design Agent service for Hermes, OpenCode, WP-CLI and direct PHP callers.
-- Page Shell library v2 with 46 page archetypes while keeping legacy shell IDs/schema compatibility.
-- Section Recipe library v2 with 60+ reusable section families while keeping legacy recipes.
-- Restored screenshot capture, visual regression, Visual Feedback v3, UX audit, benchmark corpus and governed V3 visual correction.
-- Functional `Visual_QA::compare_targets()`.
-- Independent Visual Quality Gate: required visual/interaction evidence cannot silently pass while unverified.
-- Structural Diff Engine: large composition errors escalate to BuildPlan rebuild instead of arbitrary CSS patches.
-- Task Intelligence v3 consumes Design Brain output before widget selection.
-- CI no longer depends on deleted MCP/remote directories and includes Design Brain + browser fidelity contracts.
+1. Run the PawCare node `4:1049` through a real WordPress + Elementor + Playwright runtime with a configured Figma access token.
+2. Keep the draft blocked until the Figma-rendered reference reaches the configured visual similarity target and architecture/interaction gates are satisfied.
+3. Capture the real PawCare result as a durable regression fixture once the target environment is available.
+4. Expand Figma responsive handling with explicit source frames/variants when the design file includes tablet/mobile nodes rather than inventing breakpoints from the desktop frame.
+5. Add a governed interaction wrapper for icon-bearing compound buttons so visual composition and a single click target are both preserved without flattening vector descendants.
+6. Add first-class local/custom font ingestion. RC23 enqueues Google-hosted families used by inline runs but does not fabricate unavailable proprietary fonts.
 
-## Next priorities
+## Broader roadmap
 
-1. Expand the benchmark corpus to 50-100 real reference websites/Figma frames across supported verticals.
-2. Improve cross-markup alignment using semantic anchors, section boundaries, relative geometry and Page Manifest mappings.
-3. Expand automatic correction only for controls verified by the live Elementor runtime schema.
-4. Add a governed BuildPlan patch operation to rebuild only structurally failed sections while preserving unaffected content.
-5. Retain fresh runtime evidence against each supported WordPress/Elementor matrix before calling a release production-ready.
-6. Profile large sites before adding storage/indexing architecture.
-
-## Release rule
-
-Syntax, architecture, source-atom fidelity and native-control validation are not visual proof. Reference-driven work is complete only after the rendered candidate passes the required multi-viewport quality gate.
+- Increase the rendered reference corpus to 50–100 representative real layouts.
+- Add structural correction for high-confidence section hierarchy mismatches rather than relying on CSS repair.
+- Improve cross-markup matching using stable source/Figma ownership markers.
+- Keep documentation tied to booted runtime capabilities and CI contracts.
+- Require successful live Elementor round-trip evidence before calling a release production-ready.
